@@ -446,7 +446,7 @@ function PostCard({ post, onSlangClick, onWordClick }) {
         ))}
       </div>
 
-      {/* 원문 토글 - 오른쪽 정렬 */}
+      {/* 원문 토글 - 가운데 정렬 */}
       <div className="original-section">
         <button
           className="original-toggle"
@@ -456,7 +456,7 @@ function PostCard({ post, onSlangClick, onWordClick }) {
           <span>{showOriginal ? 'Hide Original' : 'Original'}</span>
         </button>
         {showOriginal && (
-          <div className="original-text">{post.title}</div>
+          <ClickableOriginalText text={post.title} onWordClick={onWordClick} />
         )}
       </div>
 
@@ -610,6 +610,179 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
   )
 }
 
+// 클릭 가능한 원문 텍스트 (단어 클릭 + 드래그 선택)
+function ClickableOriginalText({ text, onWordClick }) {
+  const [selectedText, setSelectedText] = useState('')
+  const containerRef = useRef(null)
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection()
+    const selected = selection?.toString().trim()
+    if (selected && selected.length > 0 && selected.split(' ').length > 1) {
+      // 여러 단어 선택시 구문 검색
+      setSelectedText(selected)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      const selection = window.getSelection()
+      const selected = selection?.toString().trim()
+      if (selected && selected.length > 0 && selected.split(' ').length > 1) {
+        setSelectedText(selected)
+      }
+    }, 100)
+  }
+
+  const handlePhraseSearch = () => {
+    if (selectedText) {
+      onWordClick(selectedText, text)
+      setSelectedText('')
+      window.getSelection()?.removeAllRanges()
+    }
+  }
+
+  const handleWordClick = (word) => {
+    const cleanWord = word.replace(/[.,!?;:'"()\[\]]/g, '').trim()
+    if (cleanWord.length > 0) {
+      onWordClick(cleanWord, text)
+    }
+  }
+
+  const words = text?.split(/(\s+)/) || []
+
+  return (
+    <div className="original-text-container">
+      <div 
+        ref={containerRef}
+        className="original-text clickable"
+        onMouseUp={handleMouseUp}
+        onTouchEnd={handleTouchEnd}
+      >
+        {words.map((word, i) => {
+          if (/^\s+$/.test(word)) {
+            return <span key={i}>{word}</span>
+          }
+          return (
+            <span
+              key={i}
+              className="clickable-word"
+              onClick={(e) => {
+                e.stopPropagation()
+                // 선택된 텍스트가 없을 때만 단어 클릭
+                const selection = window.getSelection()
+                if (!selection?.toString().trim()) {
+                  handleWordClick(word)
+                }
+              }}
+            >
+              {word}
+            </span>
+          )
+        })}
+      </div>
+      
+      {/* 구문 선택 시 검색 버튼 표시 */}
+      {selectedText && (
+        <div className="phrase-search-bar">
+          <span className="phrase-preview">"{selectedText.length > 30 ? selectedText.slice(0, 30) + '...' : selectedText}"</span>
+          <button className="phrase-search-btn" onClick={handlePhraseSearch}>
+            <Icons.book />
+            <span>Look up</span>
+          </button>
+          <button className="phrase-cancel-btn" onClick={() => {
+            setSelectedText('')
+            window.getSelection()?.removeAllRanges()
+          }}>
+            <Icons.x />
+          </button>
+        </div>
+      )}
+      
+      <div className="original-hint">
+        💡 Tap a word or drag to select a phrase
+      </div>
+    </div>
+  )
+}
+
+// 원문 텍스트 (클릭 + 드래그 선택 가능)
+function ClickableOriginalText({ text, onWordClick, isComment = false }) {
+  const [selectedText, setSelectedText] = useState('')
+  const containerRef = useRef(null)
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection()
+    const selected = selection?.toString().trim()
+    if (selected && selected.length > 1 && selected.split(' ').length > 1) {
+      setSelectedText(selected)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setTimeout(() => {
+      const selection = window.getSelection()
+      const selected = selection?.toString().trim()
+      if (selected && selected.length > 1 && selected.split(' ').length > 1) {
+        setSelectedText(selected)
+      }
+    }, 10)
+  }
+
+  const searchPhrase = () => {
+    if (selectedText) {
+      onWordClick(selectedText, text)
+      setSelectedText('')
+      window.getSelection()?.removeAllRanges()
+    }
+  }
+
+  const renderClickableWords = () => {
+    const words = text.split(/(\s+)/)
+    return words.map((word, i) => {
+      if (/^\s+$/.test(word)) return <span key={i}>{word}</span>
+      
+      const cleanWord = word.replace(/[.,!?;:'"()\[\]]/g, '').trim()
+      if (cleanWord.length > 0) {
+        return (
+          <span
+            key={i}
+            className="clickable-word"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!window.getSelection()?.toString()) {
+                onWordClick(cleanWord, text)
+              }
+            }}
+          >
+            {word}
+          </span>
+        )
+      }
+      return <span key={i}>{word}</span>
+    })
+  }
+
+  return (
+    <div className={`original-text-wrapper ${isComment ? 'comment' : ''}`}>
+      <div 
+        ref={containerRef}
+        className={`${isComment ? 'comment-original-text' : 'original-text'} clickable`}
+        onMouseUp={handleMouseUp}
+        onTouchEnd={handleTouchEnd}
+      >
+        {renderClickableWords()}
+      </div>
+      {selectedText && (
+        <button className="phrase-search-btn" onClick={searchPhrase}>
+          <Icons.book />
+          <span>"{selectedText.length > 20 ? selectedText.slice(0, 20) + '...' : selectedText}" 검색</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 // 댓글 아이템 (원문 보기 추가)
 function CommentItem({ comment, onSlangClick, onWordClick }) {
   const [showKorean, setShowKorean] = useState(false)
@@ -718,9 +891,11 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
       </button>
       
       {showOriginal && (
-        <div className="comment-original-text">
-          {sentence?.original || comment.body}
-        </div>
+        <ClickableOriginalText 
+          text={sentence?.original || comment.body} 
+          onWordClick={onWordClick}
+          isComment={true}
+        />
       )}
     </div>
   )
