@@ -12,11 +12,14 @@ function App() {
     setError(null)
     
     try {
-      // 레딧에서 직접 가져오기
-      const res = await fetch('https://www.reddit.com/r/popular.json?limit=10')
+      // CORS 프록시를 통해 레딧 데이터 가져오기
+      const redditUrl = 'https://www.reddit.com/r/popular.json?limit=10'
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(redditUrl)}`
+      
+      const res = await fetch(proxyUrl)
       
       if (!res.ok) {
-        throw new Error(`Reddit 응답 에러: ${res.status}`)
+        throw new Error(`응답 에러: ${res.status}`)
       }
       
       const json = await res.json()
