@@ -1,74 +1,128 @@
-// Redlib 기반 댓글 가져오기 - API 키 불필요!
+// Reddit 댓글 라이브 데이터 - 모든 방법 시도!
 
-// 여러 Redlib 인스턴스 (하나 실패시 다른 것 사용)
-const REDLIB_INSTANCES = [
-  'https://redlib.catsarch.com',
-  'https://safereddit.com',
-  'https://redlib.perennialte.ch',
-  'https://red.ngn.tf',
-  'https://redlib.freedit.eu'
-]
-
-// old.reddit.com JSON도 백업으로 사용
-const FALLBACK_SOURCES = [
-  'https://old.reddit.com'
-]
-
-// 여러 소스에서 시도
-async function fetchWithFallback(path) {
-  const allSources = [...REDLIB_INSTANCES, ...FALLBACK_SOURCES]
+async function tryFetch(url, timeout = 10000) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
   
-  for (const baseUrl of allSources) {
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*'
+      }
+    })
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    
+    const text = await response.text()
     try {
-      const url = `${baseUrl}${path}`
-      console.log(`Trying comments: ${url}`)
+      return JSON.parse(text)
+    } catch {
+      if (text.includes('"contents"')) {
+        const wrapped = JSON.parse(text)
+        return JSON.parse(wrapped.contents)
+      }
+      throw new Error('Invalid JSON')
+    }
+  } catch (error) {
+    clearTimeout(timeoutId)
+    throw error
+  }
+}
+
+async function fetchComments(subreddit, postId, limit) {
+  const methods = [
+    // 1. PullPush API
+    {
+      name: 'PullPush',
+      url: `https://api.pullpush.io/reddit/search/comment/?link_id=t3_${postId}&size=${limit}&sort=desc&sort_type=score`,
+      transform: (data) => {
+        if (!data?.data?.length) return null
+        return data.data.map(c => ({
+          id: c.id,
+          body: c.body,
+          author: c.author,
+          score: c.score || 0,
+          created_utc: c.created_utc,
+          depth: 0
+        }))
+      }
+    },
+    
+    // 2. Reddit JSON via corsproxy
+    {
+      name: 'Reddit via corsproxy',
+      url: `https://corsproxy.io/?${encodeURIComponent(`https://www.reddit.com/r/${subreddit}/comments/${postId}.json?limit=${limit}&sort=top&raw_json=1`)}`,
+      transform: (data) => {
+        if (!Array.isArray(data) || !data[1]?.data?.children) return null
+        return flattenComments(data[1].data.children)
+      }
+    },
+    
+    // 3. Reddit JSON via allorigins
+    {
+      name: 'Reddit via allorigins',
+      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.reddit.com/r/${subreddit}/comments/${postId}.json?limit=${limit}&sort=top&raw_json=1`)}`,
+      transform: (data) => {
+        if (!Array.isArray(data) || !data[1]?.data?.children) return null
+        return flattenComments(data[1].data.children)
+      }
+    },
+    
+    // 4. Reddit 직접
+    {
+      name: 'Reddit direct',
+      url: `https://www.reddit.com/r/${subreddit}/comments/${postId}.json?limit=${limit}&sort=top&raw_json=1`,
+      transform: (data) => {
+        if (!Array.isArray(data) || !data[1]?.data?.children) return null
+        return flattenComments(data[1].data.children)
+      }
+    }
+  ]
+  
+  for (const method of methods) {
+    try {
+      console.log(`[Comments] Trying: ${method.name}`)
+      const rawData = await tryFetch(method.url)
+      const comments = method.transform(rawData)
       
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        }
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log(`Comments success from: ${baseUrl}`)
-        return { data, source: baseUrl }
+      if (comments && comments.length > 0) {
+        console.log(`[Comments] SUCCESS with ${method.name}! Got ${comments.length} comments`)
+        return { comments, source: method.name }
       }
     } catch (error) {
-      console.log(`Comments failed ${baseUrl}: ${error.message}`)
-      continue
+      console.log(`[Comments] FAILED ${method.name}: ${error.message}`)
     }
   }
   
-  throw new Error('All sources failed for comments')
+  throw new Error('All comment fetch methods failed')
 }
 
-// 댓글을 평면화하는 함수 (중첩 댓글 처리)
-function flattenComments(comments, depth = 0, maxDepth = 3) {
+// Reddit 댓글 평면화
+function flattenComments(children, depth = 0, maxDepth = 3) {
   const result = []
   
-  if (!Array.isArray(comments)) return result
+  if (!Array.isArray(children)) return result
   
-  for (const comment of comments) {
-    if (comment.kind !== 't1') continue // t1 = comment
+  for (const child of children) {
+    if (child.kind !== 't1') continue
     
-    const c = comment.data
+    const c = child.data
     if (!c.body || c.body === '[deleted]' || c.body === '[removed]') continue
     
     result.push({
       id: c.id,
       body: c.body,
       author: c.author,
-      score: c.score,
+      score: c.score || 0,
       created_utc: c.created_utc,
-      depth: depth
+      depth
     })
     
-    // 대댓글 처리 (최대 깊이까지만)
-    if (depth < maxDepth && c.replies && c.replies.data && c.replies.data.children) {
-      const childComments = flattenComments(c.replies.data.children, depth + 1, maxDepth)
-      result.push(...childComments)
+    if (depth < maxDepth && c.replies?.data?.children) {
+      result.push(...flattenComments(c.replies.data.children, depth + 1, maxDepth))
     }
   }
   
@@ -77,35 +131,35 @@ function flattenComments(comments, depth = 0, maxDepth = 3) {
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end()
+  }
 
-  const { postId, subreddit, limit = 10 } = req.query
+  const { postId, subreddit, limit = 15 } = req.query
 
   if (!postId || !subreddit) {
     return res.status(400).json({ error: 'postId and subreddit required' })
   }
 
   try {
-    // 댓글 JSON 엔드포인트
-    const path = `/r/${subreddit}/comments/${postId}.json?limit=${limit}&sort=top&raw_json=1`
-    const { data } = await fetchWithFallback(path)
-
-    // data[0] = 포스트 정보, data[1] = 댓글들
-    const commentsData = data[1]?.data?.children || []
-    
-    // 댓글 평면화 및 정리
-    const comments = flattenComments(commentsData).slice(0, 20) // 최대 20개
+    const { comments, source } = await fetchComments(subreddit, postId, limit)
 
     res.status(200).json({
-      comments,
-      total: comments.length
+      comments: comments.slice(0, 20),
+      total: comments.length,
+      isLive: true,
+      source
     })
 
   } catch (error) {
-    console.error('Comments API error:', error)
+    console.error('[Comments] Final error:', error.message)
     res.status(500).json({ 
       error: error.message,
-      comments: []
+      comments: [],
+      isLive: false
     })
   }
 }
