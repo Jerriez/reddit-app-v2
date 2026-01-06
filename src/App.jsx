@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 function App() {
   const [posts, setPosts] = useState([])
@@ -6,7 +6,8 @@ function App() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [after, setAfter] = useState(null)
-  const [popup, setPopup] = useState(null)
+  const [popup, setPopup] = useState(null) // 슬랭 팝업
+  const [wordPopup, setWordPopup] = useState(null) // 단어 검색 팝업
 
   // 포스트 로딩
   const loadPosts = useCallback(async (loadMore = false) => {
@@ -35,7 +36,6 @@ function App() {
       // Claude로 변환
       const transformedPosts = await Promise.all(
         data.posts.map(async (post) => {
-          // 캐시 확인
           const cacheKey = `post_${post.id}`
           const cached = sessionStorage.getItem(cacheKey)
           
@@ -46,7 +46,6 @@ function App() {
             } catch {}
           }
 
-          // 변환 요청
           try {
             const transformRes = await fetch('/api/transform', {
               method: 'POST',
@@ -59,7 +58,6 @@ function App() {
 
             if (transformRes.ok) {
               const transformed = await transformRes.json()
-              // 캐시 저장
               sessionStorage.setItem(cacheKey, JSON.stringify(transformed))
               return { ...post, transformed }
             }
@@ -67,14 +65,13 @@ function App() {
             console.error('Transform error:', e)
           }
 
-          // 변환 실패시 원문
           return {
             ...post,
             transformed: {
               sentences: [{
                 original: post.title,
                 simplified: post.title,
-                korean: '(탭하여 번역 재시도)',
+                korean: '(스와이프하여 번역)',
                 slang_notes: []
               }]
             }
@@ -102,6 +99,34 @@ function App() {
   useEffect(() => {
     loadPosts()
   }, [])
+
+  // 단어 검색 함수
+  const lookupWord = async (word, context = '') => {
+    setWordPopup({ word, loading: true })
+    
+    try {
+      const res = await fetch('/api/word', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ word, context })
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setWordPopup({ ...data, loading: false })
+      } else {
+        throw new Error('검색 실패')
+      }
+    } catch (e) {
+      setWordPopup({ 
+        word, 
+        meaning: 'Failed to look up',
+        korean: '검색 실패',
+        examples: [],
+        loading: false 
+      })
+    }
+  }
 
   // 에러 상태
   if (error && posts.length === 0) {
@@ -138,6 +163,7 @@ function App() {
                 key={post.id}
                 post={post}
                 onSlangClick={setPopup}
+                onWordClick={lookupWord}
               />
             ))}
 
@@ -159,6 +185,11 @@ function App() {
       {/* 슬랭 팝업 */}
       {popup && (
         <SlangPopup slang={popup} onClose={() => setPopup(null)} />
+      )}
+
+      {/* 단어 검색 팝업 */}
+      {wordPopup && (
+        <WordPopup data={wordPopup} onClose={() => setWordPopup(null)} />
       )}
     </div>
   )
@@ -186,7 +217,7 @@ function Header() {
 }
 
 // 포스트 카드 컴포넌트
-function PostCard({ post, onSlangClick }) {
+function PostCard({ post, onSlangClick, onWordClick }) {
   const [showKorean, setShowKorean] = useState({})
   const [showOriginal, setShowOriginal] = useState(false)
   const [showComments, setShowComments] = useState(false)
@@ -222,7 +253,6 @@ function PostCard({ post, onSlangClick }) {
       const res = await fetch(`/api/comments?postId=${post.id}&subreddit=${post.subreddit}`)
       const data = await res.json()
 
-      // 댓글 변환
       const transformedComments = await Promise.all(
         data.comments.slice(0, 10).map(async (comment) => {
           try {
@@ -262,11 +292,6 @@ function PostCard({ post, onSlangClick }) {
     }
   }
 
-  // 언어 토글
-  const toggleLanguage = (idx) => {
-    setShowKorean(prev => ({ ...prev, [idx]: !prev[idx] }))
-  }
-
   // 시간 포맷
   const timeAgo = (timestamp) => {
     const seconds = Math.floor(Date.now() / 1000 - timestamp)
@@ -276,44 +301,10 @@ function PostCard({ post, onSlangClick }) {
     return `${Math.floor(seconds / 86400)}일 전`
   }
 
-  // 숫자 포맷
   const formatNum = (num) => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num?.toString() || '0'
-  }
-
-  // 텍스트 렌더링 (슬랭 하이라이트)
-  const renderText = (text, slangNotes) => {
-    if (!text) return ''
-    if (!slangNotes?.length) return text
-
-    const parts = text.split(/(\([^)]+\))/)
-
-    return parts.map((part, i) => {
-      if (part.match(/^\([^)]+\)$/)) {
-        const term = part.slice(1, -1)
-        const note = slangNotes.find(n =>
-          n.term.toLowerCase() === term.toLowerCase()
-        )
-
-        if (note) {
-          return (
-            <span
-              key={i}
-              className="slang-highlight"
-              onClick={(e) => {
-                e.stopPropagation()
-                onSlangClick(note)
-              }}
-            >
-              {part}
-            </span>
-          )
-        }
-      }
-      return part
-    })
   }
 
   return (
@@ -340,24 +331,14 @@ function PostCard({ post, onSlangClick }) {
       {/* 문장들 */}
       <div className="sentences-container">
         {post.transformed?.sentences?.map((sentence, idx) => (
-          <div
+          <SentenceBlock
             key={idx}
-            className={`sentence-block ${showKorean[idx] ? 'korean' : ''}`}
-          >
-            <div
-              className="sentence-content"
-              onClick={() => toggleLanguage(idx)}
-            >
-              <span className="sentence-text">
-                {showKorean[idx]
-                  ? sentence.korean
-                  : renderText(sentence.simplified, sentence.slang_notes)}
-              </span>
-              <span className="sentence-hint">
-                {showKorean[idx] ? '← EN' : '→ 한'}
-              </span>
-            </div>
-          </div>
+            sentence={sentence}
+            isKorean={showKorean[idx]}
+            onToggleLanguage={() => setShowKorean(prev => ({ ...prev, [idx]: !prev[idx] }))}
+            onSlangClick={onSlangClick}
+            onWordClick={onWordClick}
+          />
         ))}
       </div>
 
@@ -403,7 +384,7 @@ function PostCard({ post, onSlangClick }) {
                 key={comment.id}
                 comment={comment}
                 onSlangClick={onSlangClick}
-                renderText={renderText}
+                onWordClick={onWordClick}
               />
             ))
           )}
@@ -413,11 +394,119 @@ function PostCard({ post, onSlangClick }) {
   )
 }
 
+// 문장 블록 컴포넌트 (스와이프 + 단어 탭)
+function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onWordClick }) {
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = (e) => {
+    touchEndX.current = e.changedTouches[0].clientX
+    const diff = touchEndX.current - touchStartX.current
+    
+    // 50px 이상 스와이프하면 언어 전환
+    if (Math.abs(diff) > 50) {
+      onToggleLanguage()
+    }
+  }
+
+  // 텍스트를 단어별로 분리하고 클릭 가능하게 렌더링
+  const renderClickableText = (text, slangNotes) => {
+    if (!text) return null
+
+    // 괄호로 묶인 슬랭과 일반 텍스트 분리
+    const parts = text.split(/(\([^)]+\)|\s+)/)
+
+    return parts.map((part, i) => {
+      // 공백은 그냥 반환
+      if (!part || /^\s+$/.test(part)) {
+        return <span key={i}>{part}</span>
+      }
+
+      // 괄호로 묶인 슬랭 체크
+      if (part.match(/^\([^)]+\)$/)) {
+        const term = part.slice(1, -1)
+        const note = slangNotes?.find(n =>
+          n.term.toLowerCase() === term.toLowerCase()
+        )
+
+        if (note) {
+          return (
+            <span
+              key={i}
+              className="slang-highlight"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSlangClick(note)
+              }}
+            >
+              {part}
+            </span>
+          )
+        }
+      }
+
+      // 일반 단어 - 클릭하면 검색
+      const cleanWord = part.replace(/[.,!?;:'"]/g, '').trim()
+      if (cleanWord.length > 0) {
+        return (
+          <span
+            key={i}
+            className="clickable-word"
+            onClick={(e) => {
+              e.stopPropagation()
+              onWordClick(cleanWord, text)
+            }}
+          >
+            {part}
+          </span>
+        )
+      }
+
+      return <span key={i}>{part}</span>
+    })
+  }
+
+  return (
+    <div className={`sentence-block ${isKorean ? 'korean' : ''}`}>
+      <div
+        className="sentence-content"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <span className="sentence-text">
+          {isKorean
+            ? sentence.korean
+            : renderClickableText(sentence.simplified, sentence.slang_notes)}
+        </span>
+        <span className="sentence-hint swipe-hint">
+          {isKorean ? '👈 스와이프' : '스와이프 👉'}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // 댓글 아이템 컴포넌트
-function CommentItem({ comment, onSlangClick, renderText }) {
+function CommentItem({ comment, onSlangClick, onWordClick }) {
   const [showKorean, setShowKorean] = useState(false)
+  const touchStartX = useRef(0)
 
   const sentence = comment.transformed?.sentences?.[0]
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = (e) => {
+    const diff = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(diff) > 50) {
+      setShowKorean(!showKorean)
+    }
+  }
 
   const timeAgo = (timestamp) => {
     const seconds = Math.floor(Date.now() / 1000 - timestamp)
@@ -426,27 +515,57 @@ function CommentItem({ comment, onSlangClick, renderText }) {
     return `${Math.floor(seconds / 86400)}일 전`
   }
 
+  // 단어 클릭 가능하게
+  const renderClickableText = (text, slangNotes) => {
+    if (!text) return null
+    const parts = text.split(/(\([^)]+\)|\s+)/)
+
+    return parts.map((part, i) => {
+      if (!part || /^\s+$/.test(part)) return <span key={i}>{part}</span>
+
+      if (part.match(/^\([^)]+\)$/)) {
+        const term = part.slice(1, -1)
+        const note = slangNotes?.find(n => n.term.toLowerCase() === term.toLowerCase())
+        if (note) {
+          return (
+            <span key={i} className="slang-highlight" onClick={(e) => {
+              e.stopPropagation()
+              onSlangClick(note)
+            }}>{part}</span>
+          )
+        }
+      }
+
+      const cleanWord = part.replace(/[.,!?;:'"]/g, '').trim()
+      if (cleanWord.length > 0) {
+        return (
+          <span key={i} className="clickable-word" onClick={(e) => {
+            e.stopPropagation()
+            onWordClick(cleanWord, text)
+          }}>{part}</span>
+        )
+      }
+
+      return <span key={i}>{part}</span>
+    })
+  }
+
   return (
-    <div className={`comment-item depth-${comment.depth || 0}`}>
+    <div 
+      className={`comment-item depth-${comment.depth || 0}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="comment-header">
         <span className="comment-author">u/{comment.author}</span>
         <span>· {timeAgo(comment.created_utc)}</span>
         <span>· ⬆ {comment.score}</span>
       </div>
-      <div
-        className="comment-body"
-        onClick={() => setShowKorean(!showKorean)}
-        style={{ cursor: 'pointer' }}
-      >
+      <div className="comment-body">
         {showKorean
           ? sentence?.korean
-          : renderText(sentence?.simplified, sentence?.slang_notes)}
+          : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
       </div>
-      {showKorean && sentence?.korean && (
-        <div className="comment-korean">
-          🇰🇷 {sentence.korean}
-        </div>
-      )}
     </div>
   )
 }
@@ -471,6 +590,59 @@ function SlangPopup({ slang, onClose }) {
             <div className="popup-example-label">Example</div>
             <div className="popup-example-text">"{slang.example}"</div>
           </div>
+        )}
+        
+        <button className="popup-close" onClick={onClose}>
+          닫기
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// 단어 검색 팝업 컴포넌트
+function WordPopup({ data, onClose }) {
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div className="popup word-popup" onClick={e => e.stopPropagation()}>
+        <div className="popup-handle"></div>
+        
+        {data.loading ? (
+          <div className="word-loading">
+            <div className="spinner" style={{ width: 30, height: 30 }}></div>
+            <p>"{data.word}" 검색 중...</p>
+          </div>
+        ) : (
+          <>
+            <div className="popup-term">📖 {data.word}</div>
+            
+            {data.pronunciation && (
+              <div className="word-pronunciation">{data.pronunciation}</div>
+            )}
+            
+            <div className="popup-meaning">{data.meaning}</div>
+            
+            <div className="popup-korean-box">
+              <div className="popup-korean-label">한국어</div>
+              <div>{data.korean}</div>
+            </div>
+            
+            {data.examples && data.examples.length > 0 && (
+              <div className="word-examples">
+                <div className="popup-example-label">Examples</div>
+                {data.examples.map((ex, i) => (
+                  <div key={i} className="popup-example-text">• {ex}</div>
+                ))}
+              </div>
+            )}
+            
+            {data.tips && (
+              <div className="word-tips">
+                <div className="popup-example-label">💡 Tip</div>
+                <div>{data.tips}</div>
+              </div>
+            )}
+          </>
         )}
         
         <button className="popup-close" onClick={onClose}>
