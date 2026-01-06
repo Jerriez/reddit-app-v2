@@ -276,6 +276,73 @@ function App() {
   )
 }
 
+// Reddit 비디오 플레이어 (video + audio 동기화)
+function RedditVideoPlayer({ videoUrl, audioUrl, onError }) {
+  const videoRef = useRef(null)
+  const audioRef = useRef(null)
+  const [hasAudio, setHasAudio] = useState(true)
+
+  useEffect(() => {
+    const video = videoRef.current
+    const audio = audioRef.current
+    if (!video || !audio) return
+
+    const syncPlay = () => {
+      audio.currentTime = video.currentTime
+      audio.play().catch(() => {})
+    }
+    
+    const syncPause = () => {
+      audio.pause()
+    }
+    
+    const syncTime = () => {
+      if (Math.abs(video.currentTime - audio.currentTime) > 0.3) {
+        audio.currentTime = video.currentTime
+      }
+    }
+
+    const syncVolume = () => {
+      audio.volume = video.volume
+      audio.muted = video.muted
+    }
+
+    video.addEventListener('play', syncPlay)
+    video.addEventListener('pause', syncPause)
+    video.addEventListener('seeked', syncTime)
+    video.addEventListener('volumechange', syncVolume)
+
+    return () => {
+      video.removeEventListener('play', syncPlay)
+      video.removeEventListener('pause', syncPause)
+      video.removeEventListener('seeked', syncTime)
+      video.removeEventListener('volumechange', syncVolume)
+    }
+  }, [])
+
+  return (
+    <div className="post-video-container">
+      <video
+        ref={videoRef}
+        src={videoUrl}
+        controls
+        playsInline
+        preload="metadata"
+        className="post-video"
+        onError={onError}
+      />
+      {audioUrl && hasAudio && (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          preload="metadata"
+          onError={() => setHasAudio(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 function Header() {
   return (
     <header className="header">
@@ -321,15 +388,29 @@ function PostCard({ post, onSlangClick, onWordClick }) {
     if (post.is_video && post.media?.reddit_video?.fallback_url) {
       return post.media.reddit_video.fallback_url
     }
-    // 외부 비디오 (예: v.redd.it)
     if (post.url?.includes('v.redd.it')) {
       return `${post.url}/DASH_720.mp4`
     }
     return null
   }
 
+  // 오디오 URL 추출 (Reddit은 video/audio 분리 저장)
+  const getAudioUrl = () => {
+    if (post.is_video && post.media?.reddit_video?.fallback_url) {
+      // fallback_url에서 오디오 URL 생성
+      const videoUrl = post.media.reddit_video.fallback_url
+      const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*/, '')
+      return `${baseUrl}DASH_AUDIO_128.mp4`
+    }
+    if (post.url?.includes('v.redd.it')) {
+      return `${post.url}/DASH_AUDIO_128.mp4`
+    }
+    return null
+  }
+
   const imageUrl = getImageUrl()
   const videoUrl = getVideoUrl()
+  const audioUrl = getAudioUrl()
 
   const loadComments = async () => {
     if (comments.length > 0) {
@@ -405,18 +486,13 @@ function PostCard({ post, onSlangClick, onWordClick }) {
         <span className="post-meta">· {timeAgo(post.created_utc)} · u/{post.author}</span>
       </div>
 
-      {/* 비디오 */}
+      {/* 비디오 (오디오 동기화 포함) */}
       {videoUrl && !imgError && (
-        <div className="post-video-container">
-          <video
-            src={videoUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="post-video"
-            onError={() => setImgError(true)}
-          />
-        </div>
+        <RedditVideoPlayer 
+          videoUrl={videoUrl} 
+          audioUrl={audioUrl}
+          onError={() => setImgError(true)}
+        />
       )}
 
       {/* 이미지 (비디오가 없을 때만) */}

@@ -1,4 +1,7 @@
-// Reddit 라이브 데이터 - 여러 방법 시도
+// Vercel Edge Runtime 사용 (다른 지역 서버에서 요청)
+export const config = {
+  runtime: 'edge',
+}
 
 async function tryFetch(url, timeout = 8000) {
   const controller = new AbortController()
@@ -8,9 +11,10 @@ async function tryFetch(url, timeout = 8000) {
     const response = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Cache-Control': 'no-cache',
       }
     })
     clearTimeout(timeoutId)
@@ -27,126 +31,106 @@ async function tryFetch(url, timeout = 8000) {
   }
 }
 
-// 여러 방법을 순서대로 시도
 async function fetchRedditData(after = null) {
   const afterParam = after ? `&after=${after}` : ''
   const errors = []
   
-  // 방법 1: old.reddit.com (덜 제한적)
-  try {
-    console.log('[Reddit] Trying: old.reddit.com')
-    const url = `https://old.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with old.reddit.com! Got ${data.data.children.length} posts`)
-      return { data, source: 'old.reddit.com' }
+  const methods = [
+    // 프록시들 (더 안정적)
+    {
+      name: 'corsproxy.io',
+      url: `https://corsproxy.io/?${encodeURIComponent(`https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`)}`
+    },
+    {
+      name: 'allorigins',
+      url: `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`)}`
+    },
+    {
+      name: 'corsproxy.org',
+      url: `https://corsproxy.org/?${encodeURIComponent(`https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`)}`
+    },
+    {
+      name: 'api.codetabs.com',
+      url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`)}`
+    },
+    // 직접 시도 (Edge에서는 다른 IP라 될 수도 있음)
+    {
+      name: 'old.reddit.com',
+      url: `https://old.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
+    },
+    {
+      name: 'www.reddit.com',
+      url: `https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
+    },
+  ]
+
+  for (const method of methods) {
+    try {
+      console.log(`[Reddit] Trying: ${method.name}`)
+      const data = await tryFetch(method.url)
+      
+      if (data?.data?.children?.length > 0) {
+        console.log(`[Reddit] SUCCESS with ${method.name}! Got ${data.data.children.length} posts`)
+        return { data, source: method.name }
+      }
+    } catch (e) {
+      errors.push(`${method.name}: ${e.message}`)
+      console.log(`[Reddit] ${method.name} failed: ${e.message}`)
     }
-  } catch (e) {
-    errors.push(`old.reddit.com: ${e.message}`)
-    console.log(`[Reddit] old.reddit.com failed: ${e.message}`)
   }
 
-  // 방법 2: www.reddit.com
-  try {
-    console.log('[Reddit] Trying: www.reddit.com')
-    const url = `https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with www.reddit.com! Got ${data.data.children.length} posts`)
-      return { data, source: 'www.reddit.com' }
-    }
-  } catch (e) {
-    errors.push(`www.reddit.com: ${e.message}`)
-    console.log(`[Reddit] www.reddit.com failed: ${e.message}`)
-  }
-
-  // 방법 3: api.reddit.com
-  try {
-    console.log('[Reddit] Trying: api.reddit.com')
-    const url = `https://api.reddit.com/r/popular/hot?limit=50&raw_json=1${afterParam}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with api.reddit.com! Got ${data.data.children.length} posts`)
-      return { data, source: 'api.reddit.com' }
-    }
-  } catch (e) {
-    errors.push(`api.reddit.com: ${e.message}`)
-    console.log(`[Reddit] api.reddit.com failed: ${e.message}`)
-  }
-
-  // 방법 4: corsproxy.io
-  try {
-    console.log('[Reddit] Trying: corsproxy.io')
-    const targetUrl = `https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
-    const url = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with corsproxy.io! Got ${data.data.children.length} posts`)
-      return { data, source: 'corsproxy.io' }
-    }
-  } catch (e) {
-    errors.push(`corsproxy.io: ${e.message}`)
-    console.log(`[Reddit] corsproxy.io failed: ${e.message}`)
-  }
-
-  // 방법 5: allorigins
-  try {
-    console.log('[Reddit] Trying: allorigins')
-    const targetUrl = `https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with allorigins! Got ${data.data.children.length} posts`)
-      return { data, source: 'allorigins' }
-    }
-  } catch (e) {
-    errors.push(`allorigins: ${e.message}`)
-    console.log(`[Reddit] allorigins failed: ${e.message}`)
-  }
-
-  // 방법 6: jsonp.afeld.me
-  try {
-    console.log('[Reddit] Trying: jsonp proxy')
-    const targetUrl = `https://www.reddit.com/r/popular/hot.json?limit=50&raw_json=1${afterParam}`
-    const url = `https://jsonp.afeld.me/?url=${encodeURIComponent(targetUrl)}`
-    const data = await tryFetch(url)
-    if (data?.data?.children?.length > 0) {
-      console.log(`[Reddit] SUCCESS with jsonp proxy! Got ${data.data.children.length} posts`)
-      return { data, source: 'jsonp.afeld.me' }
-    }
-  } catch (e) {
-    errors.push(`jsonp: ${e.message}`)
-    console.log(`[Reddit] jsonp proxy failed: ${e.message}`)
-  }
-
-  throw new Error(`All methods failed: ${errors.join('; ')}`)
+  throw new Error(`All methods failed: ${errors.slice(0, 3).join('; ')}`)
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-  
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-  
-  // 캐시 1분
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120')
-
-  const { limit = 25, after: afterParam } = req.query
+export default async function handler(req) {
+  // Edge Runtime은 Response 객체 사용
+  const url = new URL(req.url)
+  const limit = parseInt(url.searchParams.get('limit') || '25')
+  const afterParam = url.searchParams.get('after')
 
   try {
     const { data, source } = await fetchRedditData(afterParam || null)
     
     const children = data?.data?.children || []
     
+    // 정치 관련 서브레딧 필터링 (영어 학습에 부적합)
+    const politicalSubs = [
+      'politics', 'worldnews', 'news', 'politicalhumor', 'conservative',
+      'liberal', 'democrats', 'republican', 'uspolitics', 'ukpolitics',
+      'worldpolitics', 'neutralpolitics', 'geopolitics', 'politicaldiscussion',
+      'libertarian', 'socialism', 'capitalism', 'anarchism', 'progressive',
+      'moderatepolitics', 'centrist', 'politicalcompass', 'whitepeopletwitter',
+      'blackpeopletwitter', 'murderedbywords', 'clevercomebacks', 'facepalm',
+      'leopardsatemyface', 'selfawarewolves', 'therewasanattempt', 'nottheonion'
+    ]
+    
+    // 일반적인 정치 용어 (인물 이름 대신 역할/제도 단어)
+    const politicalKeywords = [
+      'president', 'congress', 'senate', 'senator', 'governor',
+      'election', 'vote', 'ballot', 'impeach', 'legislation',
+      'democrat', 'republican', 'liberal', 'conservative',
+      'campaign', 'rally', 'partisan', 'bipartisan',
+      'gop', 'dnc', 'rnc', 'potus', 'scotus',
+      'politician', 'lobbyist', 'filibuster', 'veto',
+      'executive order', 'white house', 'capitol'
+    ]
+    
     const posts = children
       .filter(post => {
         const p = post.data
-        return p && !p.over_18 && p.title && p.title.length > 3
+        if (!p || p.over_18 || !p.title || p.title.length < 3) return false
+        
+        // 정치 서브레딧 제외
+        const sub = p.subreddit?.toLowerCase()
+        if (politicalSubs.includes(sub)) return false
+        
+        // 제목에 정치 키워드가 있으면 제외
+        const title = p.title.toLowerCase()
+        if (politicalKeywords.some(kw => title.includes(kw))) return false
+        
+        return true
       })
-      .slice(0, parseInt(limit))
+      .slice(0, limit)
       .map(post => {
         const p = post.data
         return {
@@ -173,22 +157,34 @@ export default async function handler(req, res) {
     }
 
     console.log(`[Reddit] Sending ${posts.length} posts from ${source}`)
-    console.log(`[Reddit] First post: [r/${posts[0].subreddit}] ${posts[0].title.substring(0, 60)}...`)
 
-    res.status(200).json({
+    return new Response(JSON.stringify({
       posts,
       after: data.data?.after || null,
       isLive: true,
       source,
       count: posts.length
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 's-maxage=60, stale-while-revalidate=120'
+      }
     })
 
   } catch (error) {
     console.error('[Reddit] Final error:', error.message)
-    res.status(500).json({ 
+    return new Response(JSON.stringify({ 
       error: error.message,
       isLive: false,
       posts: []
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     })
   }
 }

@@ -293,7 +293,7 @@ body {
 
 /* 원문 토글 - 가운데 정렬 */
 .original-section {
-  padding: 0 20px 16px;
+  padding: 6px 20px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
