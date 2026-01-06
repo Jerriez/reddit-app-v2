@@ -276,16 +276,50 @@ function App() {
   )
 }
 
-// Reddit 비디오 플레이어 (video + audio 동기화)
-function RedditVideoPlayer({ videoUrl, audioUrl, onError }) {
+// Reddit 비디오 플레이어 (HLS 또는 video + audio 동기화)
+function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
   const videoRef = useRef(null)
   const audioRef = useRef(null)
-  const [hasAudio, setHasAudio] = useState(true)
+  const [audioSrc, setAudioSrc] = useState(null)
+  const [audioLoaded, setAudioLoaded] = useState(false)
 
+  // 여러 오디오 URL 형식 시도
+  useEffect(() => {
+    if (!audioUrl) return
+    
+    // 가능한 오디오 URL들
+    const baseUrl = audioUrl.replace(/DASH_AUDIO_\d+\.mp4.*/, '').replace(/DASH_audio\.mp4.*/, '')
+    const audioUrls = [
+      audioUrl,
+      `${baseUrl}DASH_AUDIO_128.mp4`,
+      `${baseUrl}DASH_AUDIO_64.mp4`,
+      `${baseUrl}DASH_audio.mp4`,
+      `${baseUrl}audio.mp4`,
+    ]
+    
+    // 첫 번째로 작동하는 URL 찾기
+    const tryNextUrl = async (index) => {
+      if (index >= audioUrls.length) return
+      
+      try {
+        const response = await fetch(audioUrls[index], { method: 'HEAD' })
+        if (response.ok) {
+          setAudioSrc(audioUrls[index])
+          return
+        }
+      } catch {}
+      
+      tryNextUrl(index + 1)
+    }
+    
+    tryNextUrl(0)
+  }, [audioUrl])
+
+  // 비디오-오디오 동기화
   useEffect(() => {
     const video = videoRef.current
     const audio = audioRef.current
-    if (!video || !audio) return
+    if (!video || !audio || !audioLoaded) return
 
     const syncPlay = () => {
       audio.currentTime = video.currentTime
@@ -307,36 +341,45 @@ function RedditVideoPlayer({ videoUrl, audioUrl, onError }) {
       audio.muted = video.muted
     }
 
+    // 초기 동기화
+    syncVolume()
+
     video.addEventListener('play', syncPlay)
     video.addEventListener('pause', syncPause)
     video.addEventListener('seeked', syncTime)
+    video.addEventListener('timeupdate', syncTime)
     video.addEventListener('volumechange', syncVolume)
 
     return () => {
       video.removeEventListener('play', syncPlay)
       video.removeEventListener('pause', syncPause)
       video.removeEventListener('seeked', syncTime)
+      video.removeEventListener('timeupdate', syncTime)
       video.removeEventListener('volumechange', syncVolume)
     }
-  }, [])
+  }, [audioLoaded])
+
+  // HLS가 있으면 사용 (video+audio 합쳐져 있음)
+  const actualVideoUrl = hlsUrl || videoUrl
 
   return (
     <div className="post-video-container">
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={actualVideoUrl}
         controls
         playsInline
         preload="metadata"
         className="post-video"
         onError={onError}
       />
-      {audioUrl && hasAudio && (
+      {audioSrc && !hlsUrl && (
         <audio
           ref={audioRef}
-          src={audioUrl}
-          preload="metadata"
-          onError={() => setHasAudio(false)}
+          src={audioSrc}
+          preload="auto"
+          onCanPlay={() => setAudioLoaded(true)}
+          onError={() => setAudioSrc(null)}
         />
       )}
     </div>
@@ -394,12 +437,20 @@ function PostCard({ post, onSlangClick, onWordClick }) {
     return null
   }
 
+  // HLS URL 추출 (video+audio 합쳐져 있음)
+  const getHlsUrl = () => {
+    if (post.is_video && post.media?.reddit_video?.hls_url) {
+      return post.media.reddit_video.hls_url
+    }
+    return null
+  }
+
   // 오디오 URL 추출 (Reddit은 video/audio 분리 저장)
   const getAudioUrl = () => {
     if (post.is_video && post.media?.reddit_video?.fallback_url) {
-      // fallback_url에서 오디오 URL 생성
       const videoUrl = post.media.reddit_video.fallback_url
-      const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*/, '')
+      // DASH_720.mp4, DASH_480.mp4 등에서 베이스 URL 추출
+      const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*/, '').replace(/DASH_[^.]+\.mp4.*/, '')
       return `${baseUrl}DASH_AUDIO_128.mp4`
     }
     if (post.url?.includes('v.redd.it')) {
@@ -410,6 +461,7 @@ function PostCard({ post, onSlangClick, onWordClick }) {
 
   const imageUrl = getImageUrl()
   const videoUrl = getVideoUrl()
+  const hlsUrl = getHlsUrl()
   const audioUrl = getAudioUrl()
 
   const loadComments = async () => {
@@ -491,6 +543,7 @@ function PostCard({ post, onSlangClick, onWordClick }) {
         <RedditVideoPlayer 
           videoUrl={videoUrl} 
           audioUrl={audioUrl}
+          hlsUrl={hlsUrl}
           onError={() => setImgError(true)}
         />
       )}
@@ -577,24 +630,36 @@ function PostCard({ post, onSlangClick, onWordClick }) {
   )
 }
 
-// 스와이프 가능한 문장 블록
+// 스와이프 가능한 문장 블록 (구문 검색 추가)
 function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onWordClick }) {
   const [dragX, setDragX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedText, setSelectedText] = useState('')
   const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
   const containerRef = useRef(null)
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
     setIsDragging(true)
   }
 
   const handleTouchMove = (e) => {
     if (!isDragging) return
     const currentX = e.touches[0].clientX
-    const diff = currentX - touchStartX.current
-    // 드래그 거리 제한 (-100 ~ 100)
-    setDragX(Math.max(-100, Math.min(100, diff)))
+    const currentY = e.touches[0].clientY
+    const diffX = currentX - touchStartX.current
+    const diffY = Math.abs(currentY - touchStartY.current)
+    
+    // 세로 스크롤이 더 크면 스와이프 취소
+    if (diffY > Math.abs(diffX)) {
+      setIsDragging(false)
+      setDragX(0)
+      return
+    }
+    
+    setDragX(Math.max(-100, Math.min(100, diffX)))
   }
 
   const handleTouchEnd = () => {
@@ -603,6 +668,25 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
     }
     setDragX(0)
     setIsDragging(false)
+  }
+
+  // 마우스/터치로 텍스트 선택 감지
+  const handleTextSelect = () => {
+    setTimeout(() => {
+      const selection = window.getSelection()
+      const selected = selection?.toString().trim()
+      if (selected && selected.length > 0 && selected.split(' ').length > 1) {
+        setSelectedText(selected)
+      }
+    }, 10)
+  }
+
+  const handlePhraseSearch = () => {
+    if (selectedText) {
+      onWordClick(selectedText, sentence.simplified || sentence.korean)
+      setSelectedText('')
+      window.getSelection()?.removeAllRanges()
+    }
   }
 
   const renderClickableText = (text, slangNotes) => {
@@ -627,7 +711,9 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
               className="slang-highlight"
               onClick={(e) => {
                 e.stopPropagation()
-                onSlangClick(note)
+                if (!window.getSelection()?.toString().trim()) {
+                  onSlangClick(note)
+                }
               }}
             >
               {part}
@@ -644,7 +730,9 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
             className="clickable-word"
             onClick={(e) => {
               e.stopPropagation()
-              onWordClick(cleanWord, text)
+              if (!window.getSelection()?.toString().trim()) {
+                onWordClick(cleanWord, text)
+              }
             }}
           >
             {part}
@@ -680,6 +768,7 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseUp={handleTextSelect}
     >
       <div className="sentence-content">
         <span className="sentence-text">
@@ -688,6 +777,23 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
             : renderClickableText(sentence.simplified, sentence.slang_notes)}
         </span>
       </div>
+      
+      {/* 구문 선택 시 검색 버튼 */}
+      {selectedText && (
+        <div className="phrase-search-bar inline">
+          <span className="phrase-preview">"{selectedText.length > 25 ? selectedText.slice(0, 25) + '...' : selectedText}"</span>
+          <button className="phrase-search-btn" onClick={handlePhraseSearch}>
+            <Icons.book />
+            <span>Look up</span>
+          </button>
+          <button className="phrase-cancel-btn" onClick={() => {
+            setSelectedText('')
+            window.getSelection()?.removeAllRanges()
+          }}>
+            <Icons.x />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -696,13 +802,22 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
 function ClickableOriginalText({ text, onWordClick }) {
   const [selectedText, setSelectedText] = useState('')
   const containerRef = useRef(null)
+  const scrollPosRef = useRef(0)
+
+  // 선택 전 스크롤 위치 저장
+  const saveScrollPos = () => {
+    scrollPosRef.current = window.scrollY
+  }
 
   const handleMouseUp = () => {
     const selection = window.getSelection()
     const selected = selection?.toString().trim()
     if (selected && selected.length > 0 && selected.split(' ').length > 1) {
-      // 여러 단어 선택시 구문 검색
       setSelectedText(selected)
+      // 스크롤 위치 복원
+      requestAnimationFrame(() => {
+        window.scrollTo(0, scrollPosRef.current)
+      })
     }
   }
 
@@ -712,8 +827,12 @@ function ClickableOriginalText({ text, onWordClick }) {
       const selected = selection?.toString().trim()
       if (selected && selected.length > 0 && selected.split(' ').length > 1) {
         setSelectedText(selected)
+        // 스크롤 위치 복원
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollPosRef.current)
+        })
       }
-    }, 100)
+    }, 50)
   }
 
   const handlePhraseSearch = () => {
@@ -738,6 +857,8 @@ function ClickableOriginalText({ text, onWordClick }) {
       <div 
         ref={containerRef}
         className="original-text clickable"
+        onMouseDown={saveScrollPos}
+        onTouchStart={saveScrollPos}
         onMouseUp={handleMouseUp}
         onTouchEnd={handleTouchEnd}
       >
@@ -751,7 +872,6 @@ function ClickableOriginalText({ text, onWordClick }) {
               className="clickable-word"
               onClick={(e) => {
                 e.stopPropagation()
-                // 선택된 텍스트가 없을 때만 단어 클릭
                 const selection = window.getSelection()
                 if (!selection?.toString().trim()) {
                   handleWordClick(word)
@@ -794,19 +914,30 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
   const [showOriginal, setShowOriginal] = useState(false)
   const [dragX, setDragX] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
+  const [selectedText, setSelectedText] = useState('')
   const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
 
   const sentence = comment.transformed?.sentences?.[0]
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
     setIsDragging(true)
   }
 
   const handleTouchMove = (e) => {
     if (!isDragging) return
-    const diff = e.touches[0].clientX - touchStartX.current
-    setDragX(Math.max(-100, Math.min(100, diff)))
+    const diffX = e.touches[0].clientX - touchStartX.current
+    const diffY = Math.abs(e.touches[0].clientY - touchStartY.current)
+    
+    if (diffY > Math.abs(diffX)) {
+      setIsDragging(false)
+      setDragX(0)
+      return
+    }
+    
+    setDragX(Math.max(-100, Math.min(100, diffX)))
   }
 
   const handleTouchEnd = () => {
@@ -815,6 +946,24 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
     }
     setDragX(0)
     setIsDragging(false)
+  }
+
+  const handleTextSelect = () => {
+    setTimeout(() => {
+      const selection = window.getSelection()
+      const selected = selection?.toString().trim()
+      if (selected && selected.length > 0 && selected.split(' ').length > 1) {
+        setSelectedText(selected)
+      }
+    }, 10)
+  }
+
+  const handlePhraseSearch = () => {
+    if (selectedText) {
+      onWordClick(selectedText, sentence?.simplified || comment.body)
+      setSelectedText('')
+      window.getSelection()?.removeAllRanges()
+    }
   }
 
   const timeAgo = (timestamp) => {
@@ -838,7 +987,9 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
           return (
             <span key={i} className="slang-highlight" onClick={(e) => {
               e.stopPropagation()
-              onSlangClick(note)
+              if (!window.getSelection()?.toString().trim()) {
+                onSlangClick(note)
+              }
             }}>{part}</span>
           )
         }
@@ -849,7 +1000,9 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
         return (
           <span key={i} className="clickable-word" onClick={(e) => {
             e.stopPropagation()
-            onWordClick(cleanWord, text)
+            if (!window.getSelection()?.toString().trim()) {
+              onWordClick(cleanWord, text)
+            }
           }}>{part}</span>
         )
       }
@@ -880,11 +1033,29 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onMouseUp={handleTextSelect}
       >
         {showKorean
           ? sentence?.korean
           : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
       </div>
+      
+      {/* 구문 선택 시 검색 버튼 */}
+      {selectedText && (
+        <div className="phrase-search-bar inline">
+          <span className="phrase-preview">"{selectedText.length > 20 ? selectedText.slice(0, 20) + '...' : selectedText}"</span>
+          <button className="phrase-search-btn" onClick={handlePhraseSearch}>
+            <Icons.book />
+            <span>Look up</span>
+          </button>
+          <button className="phrase-cancel-btn" onClick={() => {
+            setSelectedText('')
+            window.getSelection()?.removeAllRanges()
+          }}>
+            <Icons.x />
+          </button>
+        </div>
+      )}
       
       {/* 댓글 원문 보기 */}
       <button 

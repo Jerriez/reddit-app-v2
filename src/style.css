@@ -230,7 +230,7 @@ body {
 
 /* 문장 영역 */
 .sentences-container {
-  padding: 16px 20px;
+  padding: 16px 20px 8px;
   overflow: hidden; /* 스와이프 시 넘침 방지 */
 }
 
@@ -246,7 +246,8 @@ body {
 .sentence-content {
   padding: 16px 20px;
   cursor: pointer;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .sentence-text {
@@ -293,7 +294,7 @@ body {
 
 /* 원문 토글 - 가운데 정렬 */
 .original-section {
-  padding: 6px 20px 16px;
+  padding: 0 20px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -381,6 +382,12 @@ body {
   border-radius: 10px;
 }
 
+/* 본문/댓글 내부 구문 검색 바 */
+.phrase-search-bar.inline {
+  margin: 8px 16px 12px;
+  padding: 8px 12px;
+}
+
 .phrase-preview {
   flex: 1;
   font-size: 0.85rem;
@@ -389,6 +396,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .phrase-search-btn {
@@ -404,6 +412,7 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .phrase-search-btn:hover {
@@ -425,6 +434,7 @@ body {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .phrase-cancel-btn:hover {
