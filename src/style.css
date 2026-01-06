@@ -243,19 +243,6 @@ body {
   touch-action: pan-y; /* 세로 스크롤 허용, 가로는 우리가 처리 */
 }
 
-.sentence-content {
-  padding: 16px 20px;
-  cursor: pointer;
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.sentence-text {
-  flex: 1;
-  font-size: 1.05rem;
-  line-height: 1.7;
-}
-
 .sentence-hint {
   flex-shrink: 0;
   color: var(--text-secondary);
@@ -911,4 +898,155 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #2a2a3a;
+}
+
+/* 번역 토글 버튼 */
+.translate-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-purple);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 12px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.translate-toggle-btn:hover {
+  background: #7c3aed;
+  transform: scale(1.05);
+}
+
+.translate-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.translate-toggle-btn.small {
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  margin-left: 8px;
+}
+
+.translate-toggle-btn.small svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* sentence-content 레이아웃 수정 */
+.sentence-content {
+  padding: 16px 20px;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sentence-text {
+  flex: 1;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  min-width: 0;
+}
+
+/* comment-body 레이아웃 수정 */
+.comment-body {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.comment-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 발음 섹션 */
+.word-pronunciation-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  flex-wrap: wrap;
+}
+
+.word-pronunciation {
+  font-family: 'Courier New', monospace;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  background: var(--bg-hover);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.pronunciation-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pronunciation-btn:hover {
+  background: #2563eb;
+  transform: scale(1.02);
+}
+
+.pronunciation-btn.playing {
+  background: var(--accent-green);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.pronunciation-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.youglish-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent-orange);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: rgba(255, 107, 53, 0.1);
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+
+.youglish-link:hover {
+  background: rgba(255, 107, 53, 0.2);
+  transform: scale(1.02);
+}
+
+.youglish-link svg {
+  width: 14px;
+  height: 14px;
 }

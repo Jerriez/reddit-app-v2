@@ -74,6 +74,30 @@ const Icons = {
     <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
       <polygon points="5 3 19 12 5 21 5 3"/>
     </svg>
+  ),
+  volume: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+    </svg>
+  ),
+  translate: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 8l6 6"/>
+      <path d="M4 14l6-6 2-3"/>
+      <path d="M2 5h12"/>
+      <path d="M7 2v3"/>
+      <path d="M22 22l-5-10-5 10"/>
+      <path d="M14 18h6"/>
+    </svg>
+  ),
+  externalLink: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+      <polyline points="15 3 21 3 21 9"/>
+      <line x1="10" y1="14" x2="21" y2="3"/>
+    </svg>
   )
 }
 
@@ -630,55 +654,30 @@ function PostCard({ post, onSlangClick, onWordClick }) {
   )
 }
 
-// 스와이프 가능한 문장 블록 (구문 검색 추가)
+// 문장 블록 (스와이프 제거, 번역 버튼으로 대체)
 function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onWordClick }) {
-  const [dragX, setDragX] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
   const [selectedText, setSelectedText] = useState('')
-  const touchStartX = useRef(0)
-  const touchStartY = useRef(0)
   const containerRef = useRef(null)
+  const scrollPosRef = useRef(0)
 
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX
-    touchStartY.current = e.touches[0].clientY
-    setIsDragging(true)
+  // 스크롤 위치 저장
+  const saveScrollPos = () => {
+    scrollPosRef.current = window.scrollY
   }
 
-  const handleTouchMove = (e) => {
-    if (!isDragging) return
-    const currentX = e.touches[0].clientX
-    const currentY = e.touches[0].clientY
-    const diffX = currentX - touchStartX.current
-    const diffY = Math.abs(currentY - touchStartY.current)
-    
-    // 세로 스크롤이 더 크면 스와이프 취소
-    if (diffY > Math.abs(diffX)) {
-      setIsDragging(false)
-      setDragX(0)
-      return
-    }
-    
-    setDragX(Math.max(-100, Math.min(100, diffX)))
-  }
-
-  const handleTouchEnd = () => {
-    if (Math.abs(dragX) > 50) {
-      onToggleLanguage()
-    }
-    setDragX(0)
-    setIsDragging(false)
-  }
-
-  // 마우스/터치로 텍스트 선택 감지
+  // 텍스트 선택 감지
   const handleTextSelect = () => {
     setTimeout(() => {
       const selection = window.getSelection()
       const selected = selection?.toString().trim()
       if (selected && selected.length > 0 && selected.split(' ').length > 1) {
         setSelectedText(selected)
+        // 스크롤 위치 복원
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollPosRef.current)
+        })
       }
-    }, 10)
+    }, 50)
   }
 
   const handlePhraseSearch = () => {
@@ -744,38 +743,36 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
     })
   }
 
-  // 스와이프 방향에 따른 스타일 (배경색 + 이동)
-  const getSwipeStyle = () => {
-    const baseStyle = {
-      transform: `translateX(${dragX * 0.3}px)`,
-      transition: isDragging ? 'none' : 'transform 0.2s, background 0.2s'
-    }
-    
-    if (dragX > 20) {
-      return { ...baseStyle, background: 'rgba(139, 92, 246, 0.15)' } // 한글로
-    }
-    if (dragX < -20) {
-      return { ...baseStyle, background: 'rgba(59, 130, 246, 0.15)' } // 영어로
-    }
-    return baseStyle
-  }
-
   return (
     <div 
       ref={containerRef}
       className={`sentence-block ${isKorean ? 'korean' : ''}`}
-      style={getSwipeStyle()}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onMouseUp={handleTextSelect}
     >
-      <div className="sentence-content">
+      <div 
+        className="sentence-content"
+        onMouseDown={saveScrollPos}
+        onTouchStart={saveScrollPos}
+        onMouseUp={handleTextSelect}
+        onTouchEnd={handleTextSelect}
+      >
         <span className="sentence-text">
           {isKorean
             ? sentence.korean
             : renderClickableText(sentence.simplified, sentence.slang_notes)}
         </span>
+        
+        {/* 번역 토글 버튼 */}
+        <button 
+          className="translate-toggle-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleLanguage()
+          }}
+          title={isKorean ? "Show English" : "Show Korean"}
+        >
+          <Icons.translate />
+          <span>{isKorean ? 'EN' : '한'}</span>
+        </button>
       </div>
       
       {/* 구문 선택 시 검색 버튼 */}
@@ -908,44 +905,17 @@ function ClickableOriginalText({ text, onWordClick }) {
   )
 }
 
-// 댓글 아이템 (원문 보기 추가)
+// 댓글 아이템 (스와이프 제거, 번역 버튼으로 대체)
 function CommentItem({ comment, onSlangClick, onWordClick }) {
   const [showKorean, setShowKorean] = useState(false)
   const [showOriginal, setShowOriginal] = useState(false)
-  const [dragX, setDragX] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
   const [selectedText, setSelectedText] = useState('')
-  const touchStartX = useRef(0)
-  const touchStartY = useRef(0)
+  const scrollPosRef = useRef(0)
 
   const sentence = comment.transformed?.sentences?.[0]
 
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX
-    touchStartY.current = e.touches[0].clientY
-    setIsDragging(true)
-  }
-
-  const handleTouchMove = (e) => {
-    if (!isDragging) return
-    const diffX = e.touches[0].clientX - touchStartX.current
-    const diffY = Math.abs(e.touches[0].clientY - touchStartY.current)
-    
-    if (diffY > Math.abs(diffX)) {
-      setIsDragging(false)
-      setDragX(0)
-      return
-    }
-    
-    setDragX(Math.max(-100, Math.min(100, diffX)))
-  }
-
-  const handleTouchEnd = () => {
-    if (Math.abs(dragX) > 50) {
-      setShowKorean(!showKorean)
-    }
-    setDragX(0)
-    setIsDragging(false)
+  const saveScrollPos = () => {
+    scrollPosRef.current = window.scrollY
   }
 
   const handleTextSelect = () => {
@@ -954,8 +924,11 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
       const selected = selection?.toString().trim()
       if (selected && selected.length > 0 && selected.split(' ').length > 1) {
         setSelectedText(selected)
+        requestAnimationFrame(() => {
+          window.scrollTo(0, scrollPosRef.current)
+        })
       }
-    }, 10)
+    }, 50)
   }
 
   const handlePhraseSearch = () => {
@@ -1011,17 +984,8 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
     })
   }
 
-  const getSwipeStyle = () => {
-    if (dragX > 20) return { background: 'rgba(139, 92, 246, 0.1)' }
-    if (dragX < -20) return { background: 'rgba(59, 130, 246, 0.1)' }
-    return {}
-  }
-
   return (
-    <div 
-      className={`comment-item depth-${comment.depth || 0}`}
-      style={getSwipeStyle()}
-    >
+    <div className={`comment-item depth-${comment.depth || 0}`}>
       <div className="comment-header">
         <span className="comment-author">u/{comment.author}</span>
         <span>· {timeAgo(comment.created_utc)}</span>
@@ -1029,15 +993,29 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
       </div>
       <div 
         className="comment-body"
-        style={{ transform: `translateX(${dragX * 0.3}px)`, transition: isDragging ? 'none' : 'transform 0.2s' }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onMouseDown={saveScrollPos}
+        onTouchStart={saveScrollPos}
         onMouseUp={handleTextSelect}
+        onTouchEnd={handleTextSelect}
       >
-        {showKorean
-          ? sentence?.korean
-          : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
+        <span className="comment-text">
+          {showKorean
+            ? sentence?.korean
+            : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
+        </span>
+        
+        {/* 번역 토글 버튼 */}
+        <button 
+          className="translate-toggle-btn small"
+          onClick={(e) => {
+            e.stopPropagation()
+            setShowKorean(!showKorean)
+          }}
+          title={showKorean ? "Show English" : "Show Korean"}
+        >
+          <Icons.translate />
+          <span>{showKorean ? 'EN' : '한'}</span>
+        </button>
       </div>
       
       {/* 구문 선택 시 검색 버튼 */}
@@ -1110,6 +1088,29 @@ function SlangPopup({ slang, onClose }) {
 }
 
 function WordPopup({ data, onClose }) {
+  const [isPlaying, setIsPlaying] = useState(false)
+
+  // 브라우저 TTS로 발음 재생
+  const playPronunciation = () => {
+    if ('speechSynthesis' in window) {
+      // 기존 재생 중지
+      window.speechSynthesis.cancel()
+      
+      const utterance = new SpeechSynthesisUtterance(data.word)
+      utterance.lang = 'en-US'
+      utterance.rate = 0.8 // 느리게
+      
+      utterance.onstart = () => setIsPlaying(true)
+      utterance.onend = () => setIsPlaying(false)
+      utterance.onerror = () => setIsPlaying(false)
+      
+      window.speechSynthesis.speak(utterance)
+    }
+  }
+
+  // Youglish 링크
+  const youglishUrl = `https://youglish.com/pronounce/${encodeURIComponent(data.word)}/english`
+
   return (
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup word-popup" onClick={e => e.stopPropagation()}>
@@ -1127,9 +1128,30 @@ function WordPopup({ data, onClose }) {
               <span>{data.word}</span>
             </div>
             
-            {data.pronunciation && (
-              <div className="word-pronunciation">{data.pronunciation}</div>
-            )}
+            {/* 발음 섹션 - 강세 표시 + 음성 재생 */}
+            <div className="word-pronunciation-section">
+              {data.pronunciation && (
+                <span className="word-pronunciation">{data.pronunciation}</span>
+              )}
+              <button 
+                className={`pronunciation-btn ${isPlaying ? 'playing' : ''}`}
+                onClick={playPronunciation}
+                title="Listen to pronunciation"
+              >
+                <Icons.volume />
+                <span>{isPlaying ? 'Playing...' : 'Listen'}</span>
+              </button>
+              <a 
+                href={youglishUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="youglish-link"
+                title="Watch native speakers say this word"
+              >
+                <Icons.externalLink />
+                <span>Youglish</span>
+              </a>
+            </div>
             
             <div className="popup-meaning">{data.meaning}</div>
             
