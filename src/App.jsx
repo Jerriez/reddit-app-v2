@@ -12,39 +12,33 @@ function App() {
     setError(null)
     
     try {
-      // CORS 프록시를 통해 레딧 데이터 가져오기
-      const redditUrl = 'https://www.reddit.com/r/popular.json?limit=10'
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(redditUrl)}`
-      
-      const res = await fetch(proxyUrl)
+      // 우리 서버 API를 통해 레딧 데이터 가져오기
+      const res = await fetch('/api/reddit')
       
       if (!res.ok) {
-        throw new Error(`응답 에러: ${res.status}`)
+        throw new Error(`서버 에러: ${res.status}`)
       }
       
       const json = await res.json()
       
-      // 안전한 포스트만 필터링
-      const safePosts = json.data.children
-        .filter(p => !p.data.over_18 && p.data.title)
-        .slice(0, 10)
-      
       // Claude API로 변환
       const transformed = await Promise.all(
-        safePosts.map(async (post) => {
+        json.posts.map(async (post) => {
+          const postData = post.data
+          
           try {
             const transformRes = await fetch('/api/transform', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                text: post.data.title,
-                subreddit: post.data.subreddit
+                text: postData.title,
+                subreddit: postData.subreddit
               })
             })
             
             if (transformRes.ok) {
               const data = await transformRes.json()
-              return { ...post.data, transformed: data }
+              return { ...postData, transformed: data }
             }
           } catch (e) {
             console.log('변환 실패:', e)
@@ -52,12 +46,12 @@ function App() {
           
           // 변환 실패시 원문 그대로
           return {
-            ...post.data,
+            ...postData,
             transformed: {
               sentences: [{
-                original: post.data.title,
-                simplified: post.data.title,
-                korean: '(번역 로딩 중...)',
+                original: postData.title,
+                simplified: postData.title,
+                korean: '(탭하여 번역)',
                 slang_notes: []
               }]
             }
