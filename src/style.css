@@ -64,7 +64,9 @@ body {
 }
 
 .logo-icon {
-  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  color: var(--accent-orange);
 }
 
 .header-right {
@@ -147,8 +149,13 @@ body {
 }
 
 .error-icon {
-  font-size: 3rem;
   margin-bottom: 16px;
+  color: var(--accent-red);
+}
+
+.error-icon svg {
+  width: 48px;
+  height: 48px;
 }
 
 .error-message {
@@ -291,26 +298,36 @@ body {
   background: rgba(255, 107, 53, 0.35);
 }
 
-/* 원문 토글 */
+/* 원문 토글 - 오른쪽 정렬 */
 .original-section {
   padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .original-toggle {
-  background: none;
-  border: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   cursor: pointer;
-  padding: 8px 0;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  transition: color 0.2s;
+  gap: 6px;
+  transition: all 0.2s;
+  border-radius: 8px;
 }
 
 .original-toggle:hover {
   color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.original-toggle svg {
+  width: 14px;
+  height: 14px;
 }
 
 .original-text {
@@ -323,6 +340,7 @@ body {
   font-style: italic;
   line-height: 1.6;
   border: 1px solid var(--border);
+  width: 100%;
 }
 
 /* 카드 푸터 */
@@ -340,6 +358,10 @@ body {
   gap: 6px;
   font-size: 0.875rem;
   color: var(--text-secondary);
+}
+
+.stat svg {
+  flex-shrink: 0;
 }
 
 .stat.upvote {
@@ -383,8 +405,17 @@ body {
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 1.2rem;
   padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.comments-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .comments-loading {
@@ -432,6 +463,44 @@ body {
   font-size: 0.95rem;
   line-height: 1.6;
   margin-bottom: 8px;
+}
+
+/* 댓글 원문 보기 */
+.comment-original-toggle {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.comment-original-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.comment-original-toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.comment-original-text {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.5;
+  border: 1px solid var(--border);
 }
 
 .comment-korean {
@@ -520,6 +589,13 @@ body {
   font-weight: 700;
   margin-bottom: 8px;
   color: var(--accent-orange);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.popup-term svg {
+  flex-shrink: 0;
 }
 
 .popup-meaning {
@@ -599,10 +675,52 @@ body {
   transform: scale(0.95);
 }
 
-/* 스와이프 힌트 */
-.swipe-hint {
-  font-size: 0.75rem !important;
-  opacity: 0.7;
+/* 스와이프 인디케이터 */
+.swipe-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.3;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.swipe-indicator.left {
+  color: var(--accent-blue);
+}
+
+.swipe-indicator.right {
+  color: var(--accent-purple);
+}
+
+.swipe-indicator.active {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.swipe-indicator.left.active {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.swipe-indicator.right.active {
+  background: rgba(139, 92, 246, 0.2);
+}
+
+/* 비디오 컨테이너 */
+.post-video-container {
+  position: relative;
+  background: var(--bg-secondary);
+}
+
+.post-video {
+  width: 100%;
+  max-height: 500px;
+  display: block;
+  background: #000;
 }
 
 /* 단어 검색 팝업 */
@@ -655,6 +773,14 @@ body {
 
 .word-tips .popup-example-label {
   color: var(--accent-green);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.word-tips .popup-example-label svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 반응형 */
