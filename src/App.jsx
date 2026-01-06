@@ -580,11 +580,20 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
     })
   }
 
-  // 스와이프 방향에 따른 힌트 색상
+  // 스와이프 방향에 따른 스타일 (배경색 + 이동)
   const getSwipeStyle = () => {
-    if (dragX > 20) return { background: 'rgba(139, 92, 246, 0.1)' } // 한글로
-    if (dragX < -20) return { background: 'rgba(59, 130, 246, 0.1)' } // 영어로
-    return {}
+    const baseStyle = {
+      transform: `translateX(${dragX * 0.3}px)`,
+      transition: isDragging ? 'none' : 'transform 0.2s, background 0.2s'
+    }
+    
+    if (dragX > 20) {
+      return { ...baseStyle, background: 'rgba(139, 92, 246, 0.15)' } // 한글로
+    }
+    if (dragX < -20) {
+      return { ...baseStyle, background: 'rgba(59, 130, 246, 0.15)' } // 영어로
+    }
+    return baseStyle
   }
 
   return (
@@ -592,14 +601,11 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
       ref={containerRef}
       className={`sentence-block ${isKorean ? 'korean' : ''}`}
       style={getSwipeStyle()}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
-      <div
-        className="sentence-content"
-        style={{ transform: `translateX(${dragX * 0.3}px)`, transition: isDragging ? 'none' : 'transform 0.2s' }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
+      <div className="sentence-content">
         <span className="sentence-text">
           {isKorean
             ? sentence.korean

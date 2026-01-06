@@ -231,6 +231,7 @@ body {
 /* 문장 영역 */
 .sentences-container {
   padding: 16px 20px;
+  overflow: hidden; /* 스와이프 시 넘침 방지 */
 }
 
 .sentence-block {
@@ -238,12 +239,8 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   margin-bottom: 12px;
-  overflow: hidden;
-  transition: all 0.15s;
-}
-
-.sentence-block:active {
-  transform: scale(0.98);
+  will-change: transform, background;
+  touch-action: pan-y; /* 세로 스크롤 허용, 가로는 우리가 처리 */
 }
 
 .sentence-content {
@@ -328,11 +325,11 @@ body {
 
 .original-text-container {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 
 .original-text {
-  padding: 16px;
+  padding: 14px 16px;
   background: var(--bg-primary);
   border-radius: 10px;
   font-size: 0.9rem;
@@ -366,10 +363,10 @@ body {
 
 .original-hint {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
-  opacity: 0.6;
-  margin-top: 8px;
+  opacity: 0.5;
+  margin-top: 6px;
 }
 
 /* 구문 선택 바 */
