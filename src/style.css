@@ -250,10 +250,6 @@ body {
   padding: 16px 20px;
   cursor: pointer;
   user-select: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
 }
 
 .sentence-text {
@@ -673,41 +669,6 @@ body {
 .clickable-word:active {
   background: rgba(59, 130, 246, 0.3);
   transform: scale(0.95);
-}
-
-/* 스와이프 인디케이터 */
-.swipe-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  opacity: 0.3;
-  transition: all 0.15s;
-  flex-shrink: 0;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-
-.swipe-indicator.left {
-  color: var(--accent-blue);
-}
-
-.swipe-indicator.right {
-  color: var(--accent-purple);
-}
-
-.swipe-indicator.active {
-  opacity: 1;
-  transform: scale(1.1);
-}
-
-.swipe-indicator.left.active {
-  background: rgba(59, 130, 246, 0.2);
-}
-
-.swipe-indicator.right.active {
-  background: rgba(139, 92, 246, 0.2);
 }
 
 /* 비디오 컨테이너 */

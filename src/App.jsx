@@ -85,6 +85,12 @@ function App() {
   const [after, setAfter] = useState(null)
   const [popup, setPopup] = useState(null)
   const [wordPopup, setWordPopup] = useState(null)
+  
+  // useRef로 최신 after 값 추적
+  const afterRef = useRef(null)
+  useEffect(() => {
+    afterRef.current = after
+  }, [after])
 
   const loadPosts = useCallback(async (loadMore = false) => {
     try {
@@ -95,7 +101,9 @@ function App() {
         setError(null)
       }
 
-      const url = loadMore && after ? `/api/reddit?after=${after}` : '/api/reddit'
+      // useRef를 통해 최신 after 값 사용
+      const currentAfter = afterRef.current
+      const url = loadMore && currentAfter ? `/api/reddit?after=${currentAfter}` : '/api/reddit'
       const res = await fetch(url)
       
       if (!res.ok) {
@@ -169,7 +177,7 @@ function App() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [after])
+  }, []) // after를 의존성에서 제거
 
   useEffect(() => {
     loadPosts()
@@ -592,22 +600,10 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* 왼쪽 힌트 */}
-        <span className={`swipe-indicator left ${dragX < -30 ? 'active' : ''}`}>
-          <Icons.chevronLeft />
-          <span>EN</span>
-        </span>
-
         <span className="sentence-text">
           {isKorean
             ? sentence.korean
             : renderClickableText(sentence.simplified, sentence.slang_notes)}
-        </span>
-
-        {/* 오른쪽 힌트 */}
-        <span className={`swipe-indicator right ${dragX > 30 ? 'active' : ''}`}>
-          <span>한</span>
-          <Icons.chevronRight />
         </span>
       </div>
     </div>

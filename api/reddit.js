@@ -1,78 +1,82 @@
 // Reddit 라이브 데이터 - 모든 방법 시도!
 
-// 방법들 (순서대로 시도)
-const FETCH_METHODS = [
-  // 1. PullPush API (Reddit 아카이브, 가장 안정적)
-  {
-    name: 'PullPush API',
-    url: 'https://api.pullpush.io/reddit/search/submission/?subreddit=popular,all,askreddit,todayilearned,pics,funny&size=30&sort=desc&sort_type=score',
-    transform: (data) => {
-      if (!data?.data?.length) return null
-      return {
-        data: {
-          children: data.data.map(post => ({
-            data: {
-              id: post.id,
-              title: post.title,
-              subreddit: post.subreddit,
-              score: post.score || 0,
-              num_comments: post.num_comments || 0,
-              created_utc: post.created_utc,
-              author: post.author,
-              permalink: post.permalink,
-              url: post.url,
-              thumbnail: post.thumbnail,
-              selftext: post.selftext,
-              over_18: post.over_18,
-              preview: post.preview
-            }
-          })),
-          after: null
+// 방법들을 생성하는 함수 (after 파라미터 지원)
+function getFetchMethods(after = null) {
+  const afterParam = after ? `&after=${after}` : ''
+  
+  return [
+    // 1. Reddit JSON via corsproxy.io (pagination 지원)
+    {
+      name: 'Reddit via corsproxy.io',
+      url: `https://corsproxy.io/?${encodeURIComponent(`https://www.reddit.com/r/popular.json?limit=30&raw_json=1${afterParam}`)}`,
+      transform: (data) => data
+    },
+    
+    // 2. Reddit JSON via allorigins (pagination 지원)
+    {
+      name: 'Reddit via allorigins',
+      url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(`https://www.reddit.com/r/popular.json?limit=30&raw_json=1${afterParam}`),
+      transform: (data) => {
+        if (typeof data === 'string') {
+          try { return JSON.parse(data) } catch { return null }
+        }
+        return data
+      }
+    },
+    
+    // 3. old.reddit.com JSON 직접 (pagination 지원)
+    {
+      name: 'old.reddit.com direct',
+      url: `https://old.reddit.com/r/popular.json?limit=30&raw_json=1${afterParam}`,
+      transform: (data) => data
+    },
+    
+    // 4. www.reddit.com JSON 직접 (pagination 지원)
+    {
+      name: 'www.reddit.com direct',
+      url: `https://www.reddit.com/r/popular.json?limit=30&raw_json=1${afterParam}`,
+      transform: (data) => data
+    },
+    
+    // 5. Reddit via thingproxy (pagination 지원)
+    {
+      name: 'Reddit via thingproxy',
+      url: `https://thingproxy.freeboard.io/fetch/https://www.reddit.com/r/popular.json?limit=30&raw_json=1${afterParam}`,
+      transform: (data) => data
+    },
+    
+    // 6. PullPush API (pagination 미지원 - 마지막 fallback)
+    {
+      name: 'PullPush API',
+      url: 'https://api.pullpush.io/reddit/search/submission/?subreddit=popular,all,askreddit,todayilearned,pics,funny&size=30&sort=desc&sort_type=score',
+      transform: (data) => {
+        if (!data?.data?.length) return null
+        return {
+          data: {
+            children: data.data.map(post => ({
+              data: {
+                id: post.id,
+                title: post.title,
+                subreddit: post.subreddit,
+                score: post.score || 0,
+                num_comments: post.num_comments || 0,
+                created_utc: post.created_utc,
+                author: post.author,
+                permalink: post.permalink,
+                url: post.url,
+                thumbnail: post.thumbnail,
+                selftext: post.selftext,
+                over_18: post.over_18,
+                preview: post.preview
+              }
+            })),
+            after: null
+          }
         }
       }
     }
-  },
-  
-  // 2. Reddit JSON via corsproxy.io
-  {
-    name: 'Reddit via corsproxy.io',
-    url: 'https://corsproxy.io/?https%3A%2F%2Fwww.reddit.com%2Fr%2Fpopular.json%3Flimit%3D30%26raw_json%3D1',
-    transform: (data) => data
-  },
-  
-  // 3. Reddit JSON via allorigins
-  {
-    name: 'Reddit via allorigins',
-    url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://www.reddit.com/r/popular.json?limit=30&raw_json=1'),
-    transform: (data) => {
-      if (typeof data === 'string') {
-        try { return JSON.parse(data) } catch { return null }
-      }
-      return data
-    }
-  },
-  
-  // 4. old.reddit.com JSON 직접
-  {
-    name: 'old.reddit.com direct',
-    url: 'https://old.reddit.com/r/popular.json?limit=30&raw_json=1',
-    transform: (data) => data
-  },
-  
-  // 5. www.reddit.com JSON 직접
-  {
-    name: 'www.reddit.com direct',
-    url: 'https://www.reddit.com/r/popular.json?limit=30&raw_json=1',
-    transform: (data) => data
-  },
-  
-  // 6. Reddit via thingproxy
-  {
-    name: 'Reddit via thingproxy',
-    url: 'https://thingproxy.freeboard.io/fetch/https://www.reddit.com/r/popular.json?limit=30&raw_json=1',
-    transform: (data) => data
-  }
-]
+  ]
+}
 
 async function tryFetch(url, timeout = 10000) {
   const controller = new AbortController()
@@ -113,10 +117,11 @@ async function tryFetch(url, timeout = 10000) {
   }
 }
 
-async function fetchRedditData() {
+async function fetchRedditData(after = null) {
   const errors = []
+  const methods = getFetchMethods(after)
   
-  for (const method of FETCH_METHODS) {
+  for (const method of methods) {
     try {
       console.log(`[Reddit] Trying: ${method.name}`)
       const rawData = await tryFetch(method.url)
@@ -153,10 +158,10 @@ export default async function handler(req, res) {
   // 캐시 헤더 (1분)
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300')
 
-  const { limit = 15 } = req.query
+  const { limit = 15, after: afterParam } = req.query
 
   try {
-    const { data, source } = await fetchRedditData()
+    const { data, source } = await fetchRedditData(afterParam || null)
     
     const children = data?.data?.children || []
     
