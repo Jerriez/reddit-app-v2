@@ -98,6 +98,22 @@ const Icons = {
       <polyline points="15 3 21 3 21 9"/>
       <line x1="10" y1="14" x2="21" y2="3"/>
     </svg>
+  ),
+  eyeSlash: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  ),
+  chevronDown: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  ),
+  chevronUp: () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="18 15 12 9 6 15"/>
+    </svg>
   )
 }
 
@@ -109,6 +125,25 @@ function App() {
   const [after, setAfter] = useState(null)
   const [popup, setPopup] = useState(null)
   const [wordPopup, setWordPopup] = useState(null)
+  
+  // 숨긴 게시물 (localStorage에 저장)
+  const [hiddenPosts, setHiddenPosts] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hiddenPosts')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  
+  // hiddenPosts 변경시 localStorage 저장
+  useEffect(() => {
+    localStorage.setItem('hiddenPosts', JSON.stringify(hiddenPosts))
+  }, [hiddenPosts])
+  
+  const hidePost = (postId) => {
+    setHiddenPosts(prev => [...prev, postId])
+  }
   
   // useRef로 최신 after 값 추적
   const afterRef = useRef(null)
@@ -265,12 +300,15 @@ function App() {
           </div>
         ) : (
           <>
-            {posts.map(post => (
+            {posts
+              .filter(post => !hiddenPosts.includes(post.id))
+              .map(post => (
               <PostCard
                 key={post.id}
                 post={post}
                 onSlangClick={setPopup}
                 onWordClick={lookupWord}
+                onHide={hidePost}
               />
             ))}
 
@@ -300,18 +338,45 @@ function App() {
   )
 }
 
-// Reddit 비디오 플레이어 (HLS 또는 video + audio 동기화)
+// Reddit 비디오 플레이어 (자동재생 + 음소거 + 스크롤 감지)
 function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
+  const containerRef = useRef(null)
   const videoRef = useRef(null)
   const audioRef = useRef(null)
   const [audioSrc, setAudioSrc] = useState(null)
   const [audioLoaded, setAudioLoaded] = useState(false)
+  const [isVisible, setIsVisible] = useState(false)
+
+  // IntersectionObserver로 화면에 보이면 자동재생
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          setIsVisible(entry.isIntersecting)
+          const video = videoRef.current
+          if (video) {
+            if (entry.isIntersecting) {
+              video.play().catch(() => {})
+            } else {
+              video.pause()
+            }
+          }
+        })
+      },
+      { threshold: 0.5 }
+    )
+
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
 
   // 여러 오디오 URL 형식 시도
   useEffect(() => {
     if (!audioUrl) return
     
-    // 가능한 오디오 URL들
     const baseUrl = audioUrl.replace(/DASH_AUDIO_\d+\.mp4.*/, '').replace(/DASH_audio\.mp4.*/, '')
     const audioUrls = [
       audioUrl,
@@ -321,7 +386,6 @@ function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
       `${baseUrl}audio.mp4`,
     ]
     
-    // 첫 번째로 작동하는 URL 찾기
     const tryNextUrl = async (index) => {
       if (index >= audioUrls.length) return
       
@@ -365,7 +429,6 @@ function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
       audio.muted = video.muted
     }
 
-    // 초기 동기화
     syncVolume()
 
     video.addEventListener('play', syncPlay)
@@ -383,16 +446,17 @@ function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
     }
   }, [audioLoaded])
 
-  // HLS가 있으면 사용 (video+audio 합쳐져 있음)
   const actualVideoUrl = hlsUrl || videoUrl
 
   return (
-    <div className="post-video-container">
+    <div className="post-video-container" ref={containerRef}>
       <video
         ref={videoRef}
         src={actualVideoUrl}
         controls
         playsInline
+        muted
+        loop
         preload="metadata"
         className="post-video"
         onError={onError}
@@ -402,6 +466,7 @@ function RedditVideoPlayer({ videoUrl, audioUrl, hlsUrl, onError }) {
           ref={audioRef}
           src={audioSrc}
           preload="auto"
+          muted
           onCanPlay={() => setAudioLoaded(true)}
           onError={() => setAudioSrc(null)}
         />
@@ -430,13 +495,14 @@ function Header() {
   )
 }
 
-function PostCard({ post, onSlangClick, onWordClick }) {
+function PostCard({ post, onSlangClick, onWordClick, onHide }) {
   const [showKorean, setShowKorean] = useState({})
   const [showOriginal, setShowOriginal] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const [expandSelftext, setExpandSelftext] = useState(false)
 
   // 이미지 URL 추출
   const getImageUrl = () => {
@@ -558,11 +624,16 @@ function PostCard({ post, onSlangClick, onWordClick }) {
   return (
     <article className="post-card">
       <div className="post-header">
-        <span className="subreddit-link">r/{post.subreddit}</span>
-        <span className="post-meta">· {timeAgo(post.created_utc)} · u/{post.author}</span>
+        <div className="post-header-left">
+          <span className="subreddit-link">r/{post.subreddit}</span>
+          <span className="post-meta">· {timeAgo(post.created_utc)} · u/{post.author}</span>
+        </div>
+        <button className="hide-post-btn" onClick={() => onHide(post.id)} title="Hide this post">
+          <Icons.eyeSlash />
+        </button>
       </div>
 
-      {/* 비디오 (오디오 동기화 포함) */}
+      {/* 비디오 (자동재생, 음소거) */}
       {videoUrl && !imgError && (
         <RedditVideoPlayer 
           videoUrl={videoUrl} 
@@ -585,7 +656,7 @@ function PostCard({ post, onSlangClick, onWordClick }) {
         </div>
       )}
 
-      {/* 문장들 */}
+      {/* 문장들 (제목) */}
       <div className="sentences-container">
         {post.transformed?.sentences?.map((sentence, idx) => (
           <SentenceBlock
@@ -598,20 +669,45 @@ function PostCard({ post, onSlangClick, onWordClick }) {
           />
         ))}
       </div>
+      
+      {/* 본문 (selftext) - 있을 때만 표시 */}
+      {post.selftext && post.selftext.trim() && (
+        <div className="selftext-section">
+          <div className={`selftext-content ${expandSelftext ? 'expanded' : ''}`}>
+            {post.selftext}
+          </div>
+          {post.selftext.length > 150 && (
+            <button 
+              className="selftext-toggle"
+              onClick={() => setExpandSelftext(!expandSelftext)}
+            >
+              {expandSelftext ? (
+                <><Icons.chevronUp /> Show less</>
+              ) : (
+                <><Icons.chevronDown /> Read more</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
-      {/* 원문 토글 - 가운데 정렬 */}
-      <div className="original-section">
+      {/* 액션 버튼들 (원문 보기) */}
+      <div className="post-actions">
         <button
-          className="original-toggle"
+          className={`action-btn ${showOriginal ? 'active' : ''}`}
           onClick={() => setShowOriginal(!showOriginal)}
         >
-          {showOriginal ? <Icons.eyeOff /> : <Icons.fileText />}
-          <span>{showOriginal ? 'Hide Original' : 'Original'}</span>
+          <Icons.fileText />
+          <span>Original</span>
         </button>
-        {showOriginal && (
-          <ClickableOriginalText text={post.title} onWordClick={onWordClick} />
-        )}
       </div>
+      
+      {/* 원문 표시 */}
+      {showOriginal && (
+        <div className="original-section">
+          <ClickableOriginalText text={post.title} onWordClick={onWordClick} />
+        </div>
+      )}
 
       {/* 푸터 */}
       <div className="post-footer">
@@ -761,9 +857,9 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
             : renderClickableText(sentence.simplified, sentence.slang_notes)}
         </span>
         
-        {/* 번역 토글 버튼 */}
+        {/* 번역 토글 버튼 - 간소화 */}
         <button 
-          className="translate-toggle-btn"
+          className={`translate-btn ${isKorean ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation()
             onToggleLanguage()
@@ -771,13 +867,12 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
           title={isKorean ? "Show English" : "Show Korean"}
         >
           <Icons.translate />
-          <span>{isKorean ? 'EN' : '한'}</span>
         </button>
       </div>
       
-      {/* 구문 선택 시 검색 버튼 */}
+      {/* 구문 선택 시 검색 버튼 - 아래에 표시 */}
       {selectedText && (
-        <div className="phrase-search-bar inline">
+        <div className="phrase-search-bar">
           <span className="phrase-preview">"{selectedText.length > 25 ? selectedText.slice(0, 25) + '...' : selectedText}"</span>
           <button className="phrase-search-btn" onClick={handlePhraseSearch}>
             <Icons.book />
@@ -1004,9 +1099,9 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
             : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
         </span>
         
-        {/* 번역 토글 버튼 */}
+        {/* 번역 토글 버튼 - 간소화 */}
         <button 
-          className="translate-toggle-btn small"
+          className={`translate-btn small ${showKorean ? 'active' : ''}`}
           onClick={(e) => {
             e.stopPropagation()
             setShowKorean(!showKorean)
@@ -1014,13 +1109,12 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
           title={showKorean ? "Show English" : "Show Korean"}
         >
           <Icons.translate />
-          <span>{showKorean ? 'EN' : '한'}</span>
         </button>
       </div>
       
-      {/* 구문 선택 시 검색 버튼 */}
+      {/* 구문 선택 시 검색 버튼 - 아래에 표시 */}
       {selectedText && (
-        <div className="phrase-search-bar inline">
+        <div className="phrase-search-bar">
           <span className="phrase-preview">"{selectedText.length > 20 ? selectedText.slice(0, 20) + '...' : selectedText}"</span>
           <button className="phrase-search-btn" onClick={handlePhraseSearch}>
             <Icons.book />
@@ -1035,13 +1129,13 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
         </div>
       )}
       
-      {/* 댓글 원문 보기 */}
+      {/* 댓글 원문 보기 - 간소화 */}
       <button 
-        className="comment-original-toggle"
+        className={`action-btn small ${showOriginal ? 'active' : ''}`}
         onClick={() => setShowOriginal(!showOriginal)}
       >
-        {showOriginal ? <Icons.eyeOff /> : <Icons.fileText />}
-        <span>{showOriginal ? 'Hide' : 'Original'}</span>
+        <Icons.fileText />
+        <span>Original</span>
       </button>
       
       {showOriginal && (

@@ -201,8 +201,17 @@ body {
   padding: 16px 20px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   font-size: 0.875rem;
+}
+
+.post-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .subreddit-link {
@@ -213,6 +222,26 @@ body {
 
 .post-meta {
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 숨기기 버튼 */
+.hide-post-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.hide-post-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-red);
 }
 
 /* 포스트 이미지 */
@@ -281,10 +310,7 @@ body {
 
 /* 원문 토글 - 가운데 정렬 */
 .original-section {
-  padding: 0 20px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  padding: 0 20px 12px;
 }
 
 .original-toggle {
@@ -309,6 +335,144 @@ body {
 .original-toggle svg {
   width: 14px;
   height: 14px;
+}
+
+/* 본문(selftext) 섹션 */
+.selftext-section {
+  padding: 0 20px 12px;
+}
+
+.selftext-content {
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-height: 80px;
+  overflow: hidden;
+  position: relative;
+}
+
+.selftext-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--bg-secondary));
+}
+
+.selftext-content.expanded {
+  max-height: none;
+}
+
+.selftext-content.expanded::after {
+  display: none;
+}
+
+.selftext-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-top: 4px;
+}
+
+.selftext-toggle:hover {
+  color: var(--accent-purple);
+}
+
+/* 액션 버튼 영역 */
+.post-actions {
+  padding: 0 20px 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s;
+  border-radius: 6px;
+}
+
+.action-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.action-btn.active {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.action-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.action-btn.small {
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  margin-top: 6px;
+}
+
+.action-btn.small svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* 번역 버튼 (간소화) */
+.translate-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.translate-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.translate-btn.active {
+  color: var(--accent-purple);
+  border-color: var(--accent-purple);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.translate-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.translate-btn.small {
+  padding: 4px 6px;
+}
+
+.translate-btn.small svg {
+  width: 12px;
+  height: 12px;
 }
 
 .original-text-container {
@@ -357,22 +521,16 @@ body {
   margin-top: 6px;
 }
 
-/* 구문 선택 바 */
+/* 구문 선택 바 - 시스템 메뉴 아래에 표시 */
 .phrase-search-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
+  margin: 12px 16px;
   padding: 10px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--accent-blue);
   border-radius: 10px;
-}
-
-/* 본문/댓글 내부 구문 검색 바 */
-.phrase-search-bar.inline {
-  margin: 8px 16px 12px;
-  padding: 8px 12px;
 }
 
 .phrase-preview {
@@ -670,6 +828,8 @@ body {
   background: var(--bg-card);
   width: 100%;
   max-width: 500px;
+  max-height: 85vh;
+  overflow-y: auto;
   border-radius: 20px 20px 0 0;
   padding: 24px 24px 40px;
   animation: slideUp 0.3s ease-out;
