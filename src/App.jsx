@@ -178,18 +178,22 @@ function App() {
 
       const transformedPosts = await Promise.all(
         data.posts.map(async (post) => {
-          const cacheKey = `post_${post.id}`
+          const cacheKey = `post_v2_${post.id}`  // v2로 캐시 키 변경
           const cached = sessionStorage.getItem(cacheKey)
           
           if (cached) {
             try {
               const cachedData = JSON.parse(cached)
-              return { ...post, transformed: cachedData }
+              // 새 구조인지 확인
+              if (cachedData.title?.sentences) {
+                return { ...post, transformed: cachedData }
+              }
             } catch {}
           }
 
           try {
-            const transformRes = await fetch('/api/transform', {
+            // 제목 변환
+            const titleRes = await fetch('/api/transform', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -198,11 +202,35 @@ function App() {
               })
             })
 
-            if (transformRes.ok) {
-              const transformed = await transformRes.json()
-              sessionStorage.setItem(cacheKey, JSON.stringify(transformed))
-              return { ...post, transformed }
+            let titleTransformed = null
+            if (titleRes.ok) {
+              titleTransformed = await titleRes.json()
             }
+
+            // 본문(selftext)이 있으면 변환
+            let selftextTransformed = null
+            if (post.selftext && post.selftext.trim().length > 0) {
+              const selftextRes = await fetch('/api/transform', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: post.selftext,
+                  subreddit: post.subreddit
+                })
+              })
+              
+              if (selftextRes.ok) {
+                selftextTransformed = await selftextRes.json()
+              }
+            }
+
+            const transformed = {
+              title: titleTransformed,
+              selftext: selftextTransformed
+            }
+            
+            sessionStorage.setItem(cacheKey, JSON.stringify(transformed))
+            return { ...post, transformed }
           } catch (e) {
             console.error('Transform error:', e)
           }
@@ -210,12 +238,22 @@ function App() {
           return {
             ...post,
             transformed: {
-              sentences: [{
-                original: post.title,
-                simplified: post.title,
-                korean: '(Swipe to translate)',
-                slang_notes: []
-              }]
+              title: {
+                sentences: [{
+                  original: post.title,
+                  simplified: post.title,
+                  korean: '(번역 로딩 중...)',
+                  slang_notes: []
+                }]
+              },
+              selftext: post.selftext ? {
+                sentences: [{
+                  original: post.selftext,
+                  simplified: post.selftext,
+                  korean: '(번역 로딩 중...)',
+                  slang_notes: []
+                }]
+              } : null
             }
           }
         })
@@ -496,7 +534,7 @@ function Header() {
 }
 
 function PostCard({ post, onSlangClick, onWordClick, onHide }) {
-  const [showKorean, setShowKorean] = useState({})
+  const [showKorean, setShowKorean] = useState(false)  // 전체 제목에 대해 하나의 상태
   const [showOriginal, setShowOriginal] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
@@ -656,43 +694,61 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
         </div>
       )}
 
-      {/* 문장들 (제목) */}
+      {/* 제목 (AI 변환) - 두 구조 모두 지원 */}
       <div className="sentences-container">
-        {post.transformed?.sentences?.map((sentence, idx) => (
+        {(post.transformed?.title?.sentences || post.transformed?.sentences)?.map((sentence, idx) => (
           <SentenceBlock
             key={idx}
             sentence={sentence}
-            isKorean={showKorean[idx]}
-            onToggleLanguage={() => setShowKorean(prev => ({ ...prev, [idx]: !prev[idx] }))}
+            isKorean={showKorean}
             onSlangClick={onSlangClick}
             onWordClick={onWordClick}
           />
         ))}
       </div>
       
-      {/* 본문 (selftext) - 있을 때만 표시 */}
-      {post.selftext && post.selftext.trim() && (
+      {/* 본문 내용 (AI 변환) - 있을 때만 표시 */}
+      {post.transformed?.selftext?.sentences && (
         <div className="selftext-section">
-          <div className={`selftext-content ${expandSelftext ? 'expanded' : ''}`}>
-            {post.selftext}
+          <div className={`selftext-container ${expandSelftext ? 'expanded' : ''}`}>
+            {post.transformed.selftext.sentences.map((sentence, idx) => (
+              <SentenceBlock
+                key={`selftext-${idx}`}
+                sentence={sentence}
+                isKorean={showKorean}
+                onSlangClick={onSlangClick}
+                onWordClick={onWordClick}
+              />
+            ))}
           </div>
-          {post.selftext.length > 150 && (
+          {post.selftext && post.selftext.length > 200 && !expandSelftext && (
             <button 
               className="selftext-toggle"
-              onClick={() => setExpandSelftext(!expandSelftext)}
+              onClick={() => setExpandSelftext(true)}
             >
-              {expandSelftext ? (
-                <><Icons.chevronUp /> Show less</>
-              ) : (
-                <><Icons.chevronDown /> Read more</>
-              )}
+              <Icons.chevronDown /> Read more
+            </button>
+          )}
+          {expandSelftext && (
+            <button 
+              className="selftext-toggle"
+              onClick={() => setExpandSelftext(false)}
+            >
+              <Icons.chevronUp /> Show less
             </button>
           )}
         </div>
       )}
 
-      {/* 액션 버튼들 (원문 보기) */}
+      {/* 액션 버튼들 (한글 + 원문) */}
       <div className="post-actions">
+        <button
+          className={`action-btn ${showKorean ? 'active' : ''}`}
+          onClick={() => setShowKorean(!showKorean)}
+        >
+          <Icons.translate />
+          <span>{showKorean ? 'English' : '한글'}</span>
+        </button>
         <button
           className={`action-btn ${showOriginal ? 'active' : ''}`}
           onClick={() => setShowOriginal(!showOriginal)}
@@ -706,6 +762,11 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
       {showOriginal && (
         <div className="original-section">
           <ClickableOriginalText text={post.title} onWordClick={onWordClick} />
+          {post.selftext && (
+            <div className="original-selftext">
+              <ClickableOriginalText text={post.selftext} onWordClick={onWordClick} />
+            </div>
+          )}
         </div>
       )}
 
@@ -750,8 +811,8 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
   )
 }
 
-// 문장 블록 (스와이프 제거, 번역 버튼으로 대체)
-function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onWordClick }) {
+// 문장 블록 (본문만, 번역 버튼은 외부로 이동)
+function SentenceBlock({ sentence, isKorean, onSlangClick, onWordClick }) {
   const [selectedText, setSelectedText] = useState('')
   const containerRef = useRef(null)
   const scrollPosRef = useRef(0)
@@ -856,18 +917,6 @@ function SentenceBlock({ sentence, isKorean, onToggleLanguage, onSlangClick, onW
             ? sentence.korean
             : renderClickableText(sentence.simplified, sentence.slang_notes)}
         </span>
-        
-        {/* 번역 토글 버튼 - 간소화 */}
-        <button 
-          className={`translate-btn ${isKorean ? 'active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleLanguage()
-          }}
-          title={isKorean ? "Show English" : "Show Korean"}
-        >
-          <Icons.translate />
-        </button>
       </div>
       
       {/* 구문 선택 시 검색 버튼 - 아래에 표시 */}
@@ -1098,18 +1147,6 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
             ? sentence?.korean
             : renderClickableText(sentence?.simplified, sentence?.slang_notes)}
         </span>
-        
-        {/* 번역 토글 버튼 - 간소화 */}
-        <button 
-          className={`translate-btn small ${showKorean ? 'active' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            setShowKorean(!showKorean)
-          }}
-          title={showKorean ? "Show English" : "Show Korean"}
-        >
-          <Icons.translate />
-        </button>
       </div>
       
       {/* 구문 선택 시 검색 버튼 - 아래에 표시 */}
@@ -1129,14 +1166,23 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
         </div>
       )}
       
-      {/* 댓글 원문 보기 - 간소화 */}
-      <button 
-        className={`action-btn small ${showOriginal ? 'active' : ''}`}
-        onClick={() => setShowOriginal(!showOriginal)}
-      >
-        <Icons.fileText />
-        <span>Original</span>
-      </button>
+      {/* 액션 버튼들 - 한글 + 원문 */}
+      <div className="comment-actions">
+        <button 
+          className={`action-btn small ${showKorean ? 'active' : ''}`}
+          onClick={() => setShowKorean(!showKorean)}
+        >
+          <Icons.translate />
+          <span>{showKorean ? 'EN' : '한글'}</span>
+        </button>
+        <button 
+          className={`action-btn small ${showOriginal ? 'active' : ''}`}
+          onClick={() => setShowOriginal(!showOriginal)}
+        >
+          <Icons.fileText />
+          <span>Original</span>
+        </button>
+      </div>
       
       {showOriginal && (
         <ClickableOriginalText 
