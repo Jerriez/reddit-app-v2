@@ -546,14 +546,40 @@ function Header() {
   )
 }
 
+// 이미지 풀스크린 뷰어
+function ImageViewer({ imageUrl, onClose }) {
+  // 팝업 열릴 때 body 스크롤 잠금
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  return (
+    <div className="image-viewer-overlay" onClick={onClose}>
+      <button className="image-viewer-close" onClick={onClose}>
+        <Icons.x />
+      </button>
+      <img 
+        src={imageUrl} 
+        alt="" 
+        className="image-viewer-img"
+        onClick={e => e.stopPropagation()}
+      />
+    </div>
+  )
+}
+
 function PostCard({ post, onSlangClick, onWordClick, onHide }) {
-  const [showKorean, setShowKorean] = useState(false)  // 전체 제목에 대해 하나의 상태
+  const [showKorean, setShowKorean] = useState(false)
   const [showOriginal, setShowOriginal] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [expandSelftext, setExpandSelftext] = useState(false)
+  const [showImageViewer, setShowImageViewer] = useState(false)
 
   // 이미지 URL 추출
   const getImageUrl = () => {
@@ -694,9 +720,9 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
         />
       )}
 
-      {/* 이미지 (비디오가 없을 때만) */}
+      {/* 이미지 (비디오가 없을 때만) - 클릭하면 원본 보기 */}
       {!videoUrl && imageUrl && !imgError && (
-        <div className="post-image-container">
+        <div className="post-image-container" onClick={() => setShowImageViewer(true)}>
           <img
             src={imageUrl}
             alt=""
@@ -705,6 +731,11 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
             onError={() => setImgError(true)}
           />
         </div>
+      )}
+      
+      {/* 이미지 풀스크린 뷰어 */}
+      {showImageViewer && imageUrl && (
+        <ImageViewer imageUrl={imageUrl} onClose={() => setShowImageViewer(false)} />
       )}
 
       {/* 제목 (AI 변환) - 두 구조 모두 지원 */}
@@ -753,14 +784,14 @@ function PostCard({ post, onSlangClick, onWordClick, onHide }) {
         </div>
       )}
 
-      {/* 액션 버튼들 (한글 + 원문) */}
-      <div className="post-actions">
+      {/* 액션 버튼들 (Korean + Original) - 중앙 정렬 */}
+      <div className="post-actions center">
         <button
           className={`action-btn ${showKorean ? 'active' : ''}`}
           onClick={() => setShowKorean(!showKorean)}
         >
           <Icons.translate />
-          <span>{showKorean ? 'English' : '한글'}</span>
+          <span>{showKorean ? 'English' : 'Korean'}</span>
         </button>
         <button
           className={`action-btn ${showOriginal ? 'active' : ''}`}
@@ -1179,14 +1210,14 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
         </div>
       )}
       
-      {/* 액션 버튼들 - 한글 + 원문 */}
+      {/* 액션 버튼들 - Korean + Original */}
       <div className="comment-actions">
         <button 
           className={`action-btn small ${showKorean ? 'active' : ''}`}
           onClick={() => setShowKorean(!showKorean)}
         >
           <Icons.translate />
-          <span>{showKorean ? 'EN' : '한글'}</span>
+          <span>{showKorean ? 'EN' : 'KR'}</span>
         </button>
         <button 
           className={`action-btn small ${showOriginal ? 'active' : ''}`}
@@ -1209,6 +1240,14 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
 }
 
 function SlangPopup({ slang, onClose }) {
+  // 팝업 열릴 때 body 스크롤 잠금
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   return (
     <div className="popup-overlay" onClick={onClose}>
       <div className="popup" onClick={e => e.stopPropagation()}>
@@ -1243,7 +1282,84 @@ function SlangPopup({ slang, onClose }) {
 function WordPopup({ data, onClose }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [showYouglish, setShowYouglish] = useState(false)
-  const [youglishError, setYouglishError] = useState(false)
+  const [youglishReady, setYouglishReady] = useState(false)
+  const [youglishLoading, setYouglishLoading] = useState(false)
+  const widgetRef = useRef(null)
+  const widgetContainerRef = useRef(null)
+
+  // 팝업 열릴 때 body 스크롤 잠금
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  // Youglish 위젯 로드
+  useEffect(() => {
+    if (!showYouglish) return
+    
+    setYouglishLoading(true)
+    
+    const initWidget = () => {
+      // DOM이 준비될 때까지 약간 대기
+      setTimeout(() => {
+        if (!window.YG || !document.getElementById('youglish-widget')) {
+          // 아직 준비 안됨, 재시도
+          setTimeout(initWidget, 100)
+          return
+        }
+        
+        try {
+          widgetRef.current = new window.YG.Widget('youglish-widget', {
+            width: '100%',
+            components: 91,
+            events: {
+              'onFetchDone': (event) => {
+                setYouglishLoading(false)
+                if (event.totalResult === 0) {
+                  console.log('No Youglish results for:', data.word)
+                }
+              }
+            }
+          })
+          widgetRef.current.fetch(data.word, 'english')
+        } catch (e) {
+          console.error('Youglish widget error:', e)
+          setYouglishLoading(false)
+        }
+      }, 50)
+    }
+    
+    // 이미 스크립트가 로드되어 있으면 바로 위젯 생성
+    if (window.YG) {
+      initWidget()
+      return
+    }
+
+    // 스크립트 로드
+    const script = document.createElement('script')
+    script.src = 'https://youglish.com/public/emb/widget.js'
+    script.async = true
+    
+    // API 준비 콜백
+    window.onYouglishAPIReady = () => {
+      setYouglishReady(true)
+      initWidget()
+    }
+    
+    document.head.appendChild(script)
+    
+    return () => {
+      // cleanup
+      if (widgetRef.current) {
+        try {
+          widgetRef.current.close && widgetRef.current.close()
+        } catch (e) {}
+        widgetRef.current = null
+      }
+    }
+  }, [showYouglish, data.word])
 
   // 브라우저 TTS로 발음 재생
   const playPronunciation = () => {
@@ -1261,9 +1377,6 @@ function WordPopup({ data, onClose }) {
       window.speechSynthesis.speak(utterance)
     }
   }
-
-  // Youglish URL
-  const youglishUrl = `https://youglish.com/pronounce/${encodeURIComponent(data.word)}/english`
 
   return (
     <div className="popup-overlay" onClick={onClose}>
@@ -1296,38 +1409,24 @@ function WordPopup({ data, onClose }) {
                 <span>{isPlaying ? 'Playing...' : 'Listen'}</span>
               </button>
               <button 
-                className="youglish-btn"
+                className={`youglish-btn ${showYouglish ? 'active' : ''}`}
                 onClick={() => setShowYouglish(!showYouglish)}
-                title="Watch native speakers"
               >
                 <Icons.play />
                 <span>Youglish</span>
               </button>
             </div>
             
-            {/* Youglish 팝업 영역 */}
+            {/* Youglish 위젯 영역 */}
             {showYouglish && (
-              <div className="youglish-container">
-                {!youglishError ? (
-                  <iframe
-                    src={youglishUrl}
-                    title="Youglish"
-                    className="youglish-iframe"
-                    onError={() => setYouglishError(true)}
-                    sandbox="allow-scripts allow-same-origin allow-popups"
-                  />
-                ) : null}
-                <div className="youglish-fallback">
-                  <a 
-                    href={youglishUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="youglish-external-link"
-                  >
-                    <Icons.externalLink />
-                    <span>Open in Youglish</span>
-                  </a>
-                </div>
+              <div className="youglish-widget-container" ref={widgetContainerRef}>
+                {youglishLoading && (
+                  <div className="youglish-loading">
+                    <div className="spinner" style={{ width: 24, height: 24 }}></div>
+                    <span>Loading videos...</span>
+                  </div>
+                )}
+                <div id="youglish-widget"></div>
               </div>
             )}
             

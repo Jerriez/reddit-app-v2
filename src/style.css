@@ -476,6 +476,10 @@ body {
   gap: 8px;
 }
 
+.post-actions.center {
+  justify-content: center;
+}
+
 .action-btn {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -850,14 +854,18 @@ body {
 /* 팝업 오버레이 */
 .popup-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 200;
   animation: fadeIn 0.2s;
+  overflow: hidden;
 }
 
 @keyframes fadeIn {
@@ -865,15 +873,15 @@ body {
   to { opacity: 1; }
 }
 
-/* 팝업 */
+/* 팝업 - 전체화면에서 아래에서 올라옴 */
 .popup {
   background: var(--bg-card);
   width: 100%;
   max-width: 500px;
-  max-height: 85vh;
+  max-height: 90vh;
   overflow-y: auto;
   border-radius: 20px 20px 0 0;
-  padding: 24px 24px 40px;
+  padding: 20px 20px 40px;
   animation: slideUp 0.3s ease-out;
   border: 1px solid var(--border);
   border-bottom: none;
@@ -889,7 +897,54 @@ body {
   height: 4px;
   background: var(--border);
   border-radius: 2px;
-  margin: 0 auto 24px;
+  margin: 0 auto 20px;
+}
+
+/* 이미지 풀스크린 뷰어 */
+.image-viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.98);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  animation: fadeIn 0.2s;
+}
+
+.image-viewer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 301;
+}
+
+.image-viewer-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.image-viewer-img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+}
+
+/* 이미지 컨테이너 클릭 가능 표시 */
+.post-image-container {
+  cursor: zoom-in;
 }
 
 .popup-term {
@@ -1201,6 +1256,7 @@ body {
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.2s;
+  text-decoration: none;
 }
 
 .youglish-btn:hover {
@@ -1208,51 +1264,34 @@ body {
   transform: scale(1.02);
 }
 
+.youglish-btn.active {
+  background: #c44a1f;
+}
+
 .youglish-btn svg {
   width: 14px;
   height: 14px;
 }
 
-/* 유글리시 iframe 컨테이너 */
-.youglish-container {
+/* Youglish 위젯 컨테이너 */
+.youglish-widget-container {
   margin: 12px 0;
   border-radius: 12px;
   overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  background: #000;
+  min-height: 200px;
 }
 
-.youglish-iframe {
-  width: 100%;
-  height: 250px;
-  border: none;
-}
-
-.youglish-fallback {
-  padding: 12px;
-  text-align: center;
-  background: var(--bg-primary);
-}
-
-.youglish-external-link {
-  display: inline-flex;
+.youglish-loading {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--accent-orange);
-  text-decoration: none;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  color: var(--text-secondary);
   font-size: 0.85rem;
-  font-weight: 500;
-  padding: 10px 20px;
-  background: rgba(255, 107, 53, 0.1);
-  border-radius: 20px;
-  transition: all 0.2s;
 }
 
-.youglish-external-link:hover {
-  background: rgba(255, 107, 53, 0.2);
-}
-
-.youglish-external-link svg {
-  width: 14px;
-  height: 14px;
+#youglish-widget {
+  width: 100%;
 }
