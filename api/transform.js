@@ -1,4 +1,61 @@
-// Claude API로 텍스트 변환 + 번역
+// Claude API로 텍스트 변환 + 번역 (KV 캐싱 지원)
+
+// 간단한 해시 함수 (캐시 키 생성용)
+function simpleHash(str) {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return 'tx_' + Math.abs(hash).toString(36)
+}
+
+// KV 캐시 조회
+async function kvGet(key) {
+  const KV_URL = process.env.KV_REST_API_URL
+  const KV_TOKEN = process.env.KV_REST_API_TOKEN
+  
+  if (!KV_URL || !KV_TOKEN) return null
+  
+  try {
+    const res = await fetch(`${KV_URL}/get/${key}`, {
+      headers: { Authorization: `Bearer ${KV_TOKEN}` }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      if (data.result) {
+        return JSON.parse(data.result)
+      }
+    }
+  } catch (e) {
+    console.error('KV GET error:', e)
+  }
+  return null
+}
+
+// KV 캐시 저장 (24시간 TTL)
+async function kvSet(key, value) {
+  const KV_URL = process.env.KV_REST_API_URL
+  const KV_TOKEN = process.env.KV_REST_API_TOKEN
+  
+  if (!KV_URL || !KV_TOKEN) return false
+  
+  try {
+    const res = await fetch(`${KV_URL}/set/${key}?EX=86400`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${KV_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(value)
+    })
+    return res.ok
+  } catch (e) {
+    console.error('KV SET error:', e)
+  }
+  return false
+}
 
 const SYSTEM_PROMPT = `You are an English text simplifier for Korean learners at CEFR B1 level.
 
@@ -90,6 +147,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Text too short' })
   }
 
+  // 캐시 키 생성
+  const cacheKey = simpleHash(text + (subreddit || ''))
+  
+  // 1. KV 캐시에서 먼저 확인
+  const cached = await kvGet(cacheKey)
+  if (cached) {
+    console.log(`[Cache HIT] ${cacheKey}`)
+    return res.status(200).json({ ...cached, cached: true })
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
     return res.status(500).json({ error: 'API key not configured' })
@@ -128,6 +195,12 @@ export default async function handler(req, res) {
 
     try {
       const parsed = JSON.parse(result)
+      
+      // 2. KV 캐시에 저장 (백그라운드)
+      kvSet(cacheKey, parsed).then(success => {
+        if (success) console.log(`[Cache SET] ${cacheKey}`)
+      })
+      
       return res.status(200).json(parsed)
     } catch (parseError) {
       // 파싱 실패시 기본 응답

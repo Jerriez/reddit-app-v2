@@ -178,13 +178,12 @@ function App() {
 
       const transformedPosts = await Promise.all(
         data.posts.map(async (post) => {
-          const cacheKey = `post_v2_${post.id}`  // v2로 캐시 키 변경
+          const cacheKey = `post_v2_${post.id}`
           const cached = sessionStorage.getItem(cacheKey)
           
           if (cached) {
             try {
               const cachedData = JSON.parse(cached)
-              // 새 구조인지 확인
               if (cachedData.title?.sentences) {
                 return { ...post, transformed: cachedData }
               }
@@ -192,36 +191,36 @@ function App() {
           }
 
           try {
-            // 제목 변환
-            const titleRes = await fetch('/api/transform', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                text: post.title,
-                subreddit: post.subreddit
-              })
-            })
+            // 병렬로 제목과 본문 동시 변환 (속도 2배 향상)
+            const [titleRes, selftextRes] = await Promise.all([
+              fetch('/api/transform', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: post.title,
+                  subreddit: post.subreddit
+                })
+              }),
+              post.selftext && post.selftext.trim().length > 0
+                ? fetch('/api/transform', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      text: post.selftext,
+                      subreddit: post.subreddit
+                    })
+                  })
+                : Promise.resolve(null)
+            ])
 
             let titleTransformed = null
             if (titleRes.ok) {
               titleTransformed = await titleRes.json()
             }
 
-            // 본문(selftext)이 있으면 변환
             let selftextTransformed = null
-            if (post.selftext && post.selftext.trim().length > 0) {
-              const selftextRes = await fetch('/api/transform', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  text: post.selftext,
-                  subreddit: post.subreddit
-                })
-              })
-              
-              if (selftextRes.ok) {
-                selftextTransformed = await selftextRes.json()
-              }
+            if (selftextRes && selftextRes.ok) {
+              selftextTransformed = await selftextRes.json()
             }
 
             const transformed = {
@@ -332,9 +331,23 @@ function App() {
 
       <main className="container">
         {loading ? (
-          <div className="loading-container">
-            <div className="spinner"></div>
-            <p className="loading-text">Loading Reddit posts...</p>
+          <div className="skeleton-container">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="skeleton-card">
+                <div className="skeleton-header">
+                  <div className="skeleton-line short"></div>
+                </div>
+                <div className="skeleton-image"></div>
+                <div className="skeleton-content">
+                  <div className="skeleton-line"></div>
+                  <div className="skeleton-line medium"></div>
+                </div>
+                <div className="skeleton-footer">
+                  <div className="skeleton-line tiny"></div>
+                  <div className="skeleton-line tiny"></div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <>
@@ -1229,16 +1242,17 @@ function SlangPopup({ slang, onClose }) {
 
 function WordPopup({ data, onClose }) {
   const [isPlaying, setIsPlaying] = useState(false)
+  const [showYouglish, setShowYouglish] = useState(false)
+  const [youglishError, setYouglishError] = useState(false)
 
   // 브라우저 TTS로 발음 재생
   const playPronunciation = () => {
     if ('speechSynthesis' in window) {
-      // 기존 재생 중지
       window.speechSynthesis.cancel()
       
       const utterance = new SpeechSynthesisUtterance(data.word)
       utterance.lang = 'en-US'
-      utterance.rate = 0.8 // 느리게
+      utterance.rate = 0.8
       
       utterance.onstart = () => setIsPlaying(true)
       utterance.onend = () => setIsPlaying(false)
@@ -1248,7 +1262,7 @@ function WordPopup({ data, onClose }) {
     }
   }
 
-  // Youglish 링크
+  // Youglish URL
   const youglishUrl = `https://youglish.com/pronounce/${encodeURIComponent(data.word)}/english`
 
   return (
@@ -1268,7 +1282,7 @@ function WordPopup({ data, onClose }) {
               <span>{data.word}</span>
             </div>
             
-            {/* 발음 섹션 - 강세 표시 + 음성 재생 */}
+            {/* 발음 섹션 */}
             <div className="word-pronunciation-section">
               {data.pronunciation && (
                 <span className="word-pronunciation">{data.pronunciation}</span>
@@ -1281,17 +1295,41 @@ function WordPopup({ data, onClose }) {
                 <Icons.volume />
                 <span>{isPlaying ? 'Playing...' : 'Listen'}</span>
               </button>
-              <a 
-                href={youglishUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="youglish-link"
-                title="Watch native speakers say this word"
+              <button 
+                className="youglish-btn"
+                onClick={() => setShowYouglish(!showYouglish)}
+                title="Watch native speakers"
               >
-                <Icons.externalLink />
+                <Icons.play />
                 <span>Youglish</span>
-              </a>
+              </button>
             </div>
+            
+            {/* Youglish 팝업 영역 */}
+            {showYouglish && (
+              <div className="youglish-container">
+                {!youglishError ? (
+                  <iframe
+                    src={youglishUrl}
+                    title="Youglish"
+                    className="youglish-iframe"
+                    onError={() => setYouglishError(true)}
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                  />
+                ) : null}
+                <div className="youglish-fallback">
+                  <a 
+                    href={youglishUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="youglish-external-link"
+                  >
+                    <Icons.externalLink />
+                    <span>Open in Youglish</span>
+                  </a>
+                </div>
+              </div>
+            )}
             
             <div className="popup-meaning">{data.meaning}</div>
             
