@@ -851,7 +851,7 @@ body {
   cursor: not-allowed;
 }
 
-/* 팝업 오버레이 */
+/* 팝업 오버레이 - iOS 전체 화면 대응 */
 .popup-overlay {
   position: fixed;
   top: 0;
@@ -866,6 +866,8 @@ body {
   z-index: 200;
   animation: fadeIn 0.2s;
   overflow: hidden;
+  /* iOS safe area - 하단만 */
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 @keyframes fadeIn {
@@ -917,7 +919,7 @@ body {
 
 .image-viewer-close {
   position: absolute;
-  top: 16px;
+  top: max(16px, env(safe-area-inset-top));
   right: 16px;
   background: rgba(255, 255, 255, 0.1);
   border: none;

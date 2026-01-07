@@ -548,11 +548,22 @@ function Header() {
 
 // 이미지 풀스크린 뷰어
 function ImageViewer({ imageUrl, onClose }) {
-  // 팝업 열릴 때 body 스크롤 잠금
+  // iOS Safari 스크롤 완전 잠금
   useEffect(() => {
+    const scrollY = window.scrollY
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.left = '0'
+    document.body.style.right = '0'
     document.body.style.overflow = 'hidden'
+    
     return () => {
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.left = ''
+      document.body.style.right = ''
       document.body.style.overflow = ''
+      window.scrollTo(0, scrollY)
     }
   }, [])
 
@@ -1240,11 +1251,22 @@ function CommentItem({ comment, onSlangClick, onWordClick }) {
 }
 
 function SlangPopup({ slang, onClose }) {
-  // 팝업 열릴 때 body 스크롤 잠금
+  // iOS Safari 스크롤 완전 잠금
   useEffect(() => {
+    const scrollY = window.scrollY
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.left = '0'
+    document.body.style.right = '0'
     document.body.style.overflow = 'hidden'
+    
     return () => {
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.left = ''
+      document.body.style.right = ''
       document.body.style.overflow = ''
+      window.scrollTo(0, scrollY)
     }
   }, [])
 
@@ -1286,12 +1308,24 @@ function WordPopup({ data, onClose }) {
   const [youglishLoading, setYouglishLoading] = useState(false)
   const widgetRef = useRef(null)
   const widgetContainerRef = useRef(null)
+  const scrollYRef = useRef(0)
 
-  // 팝업 열릴 때 body 스크롤 잠금
+  // iOS Safari 스크롤 완전 잠금
   useEffect(() => {
+    scrollYRef.current = window.scrollY
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollYRef.current}px`
+    document.body.style.left = '0'
+    document.body.style.right = '0'
     document.body.style.overflow = 'hidden'
+    
     return () => {
+      document.body.style.position = ''
+      document.body.style.top = ''
+      document.body.style.left = ''
+      document.body.style.right = ''
       document.body.style.overflow = ''
+      window.scrollTo(0, scrollYRef.current)
     }
   }, [])
 
